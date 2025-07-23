@@ -14,7 +14,14 @@ const app: Express = express();
 
 app.use(
   cors({
-    origin: ["https://shop.kakrist.site"],
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "https://shop.kakrist.site",
+      "https://admin-panel-tawny-mu.vercel.app",
+      "https://basic-e-commerce-kkrist.vercel.app",
+    ],
+
     credentials: true,
   })
 );

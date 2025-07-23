@@ -47,14 +47,13 @@ const cookie_parser_1 = __importDefault(require("cookie-parser"));
 dotenv_1.default.config();
 database.connect();
 const app = (0, express_1.default)();
-const whiteList = ["http://localhost:3000", "*"];
 app.use((0, cors_1.default)({
     origin: [
         "http://localhost:3000",
         "http://localhost:5173",
+        "https://shop.kakrist.site",
         "https://admin-panel-tawny-mu.vercel.app",
         "https://basic-e-commerce-kkrist.vercel.app",
-        "https://snazzy-chimera-72a2db.netlify.app",
     ],
     credentials: true,
 }));

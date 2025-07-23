@@ -44,6 +44,7 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             sameSite: "none",
             path: "/",
             maxAge: isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined,
+            domain: ".kakrist.site",
         });
         res.json({
             code: 200,
