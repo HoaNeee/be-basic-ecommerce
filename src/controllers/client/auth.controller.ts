@@ -1,11 +1,6 @@
 import { Request, Response } from "express";
-import {
-  getRefreshToken,
-  getAccessToken,
-} from "../../../helpers/getAccessToken";
+import { getAccessToken } from "../../../helpers/getAccessToken";
 import md5 from "md5";
-import * as generate from "../../../helpers/generateString";
-import jwt from "jsonwebtoken";
 import Customer from "../../models/customer.model";
 import { MyRequest } from "../../middlewares/client/auth.middleware";
 import Cart from "../../models/cart.model";
@@ -24,8 +19,6 @@ export const login = async (req: Request, res: Response) => {
     if (md5(password) !== user.password) {
       throw Error("Password not correct!!");
     }
-
-    // const timeExire = 60 * 60 * 24 * 1;
 
     const cart = await Cart.findOne({ user_id: user.id, deleted: false });
 
