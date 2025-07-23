@@ -1,0 +1,22 @@
+import { Router } from "express";
+import * as controller from "../../controllers/admin/product.controller";
+
+const router: Router = Router();
+
+router.get("/", controller.index);
+router.post("/create", controller.create);
+router.get("/detail/:id", controller.detail);
+router.patch("/edit/:id", controller.edit);
+router.patch("/edit-sub-product/:id", controller.editSubProduct);
+router.get("/get-price", controller.getPriceProduct);
+router.post("/filter-product", controller.filterProduct);
+router.delete("/delete/:id", controller.remove);
+router.delete("/delete/sub-product/:id", controller.removeSubProduct);
+router.patch("/change-multi", controller.changeMulti);
+router.get("/get-all-sku", controller.getAllSKU);
+router.post("/products-sku", controller.productsSKU);
+router.get("/top-sell", controller.topSell);
+router.get("/low-quantity", controller.lowQuantity);
+
+const productRouter = router;
+export default productRouter;
