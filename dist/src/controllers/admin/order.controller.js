@@ -57,6 +57,7 @@ const order_1 = require("../../../utils/order");
 const notification_model_1 = __importDefault(require("../../models/notification.model"));
 const product_model_1 = __importDefault(require("../../models/product.model"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
+const socket_1 = require("../../../socket");
 const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         let find = {
@@ -141,7 +142,11 @@ const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const order_id = req.params.id;
         const { status } = req.body;
         const order = yield order_model_1.default.findOne({ _id: order_id });
-        if (status === "confirmed") {
+        const customer = yield customer_model_1.default.findOne({ _id: order.user_id });
+        if (!order) {
+            throw Error("Order not found!");
+        }
+        if (status === "confirmed" && order.status === "pending") {
             const skus = order.products.map((item) => item.SKU);
             const products = yield product_model_1.default.find({
                 SKU: { $in: skus },
@@ -182,7 +187,19 @@ const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             image: (0, order_1.statusOrder)(order.status).image,
             receiver: "customer",
         });
-        yield notify1.save();
+        if (customer.setting.notification || !customer.setting) {
+            const io = (0, socket_1.getIo)();
+            io.emit("SERVER_RETURN_CHANGE_STATUS_ORDER", {
+                user_id: order.user_id,
+                title: (0, order_1.statusOrder)(order.status).title,
+                body: (0, order_1.statusOrder)(order.status).body,
+                ref_id: order.orderNo,
+                ref_link: "/profile/orders",
+                image: (0, order_1.statusOrder)(order.status).image,
+                message: `Your order with orderNo: ${order.orderNo} has been placed successfully!`,
+            });
+            yield notify1.save();
+        }
         res.json({
             code: 200,
             message: "Status Updated!",

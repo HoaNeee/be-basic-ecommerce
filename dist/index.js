@@ -44,17 +44,28 @@ const index_route_1 = __importDefault(require("./src/routes/admin/index.route"))
 const index_route_2 = __importDefault(require("./src/routes/client/index.route"));
 const notification_route_1 = __importDefault(require("./src/routes/notification.route"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
+const node_http_1 = __importDefault(require("node:http"));
+const socket_io_1 = require("socket.io");
+const socket = __importStar(require("./socket"));
 dotenv_1.default.config();
 database.connect();
 const app = (0, express_1.default)();
+const server = node_http_1.default.createServer(app);
+const whiteList = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://shop.kakrist.site",
+    "https://admin-panel-tawny-mu.vercel.app",
+    "https://basic-e-commerce-kkrist.vercel.app",
+];
+const io = new socket_io_1.Server(server, {
+    cors: {
+        origin: whiteList,
+        credentials: true,
+    },
+});
 app.use((0, cors_1.default)({
-    origin: [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://shop.kakrist.site",
-        "https://admin-panel-tawny-mu.vercel.app",
-        "https://basic-e-commerce-kkrist.vercel.app",
-    ],
+    origin: whiteList,
     credentials: true,
 }));
 app.use((0, cookie_parser_1.default)());
@@ -63,7 +74,8 @@ app.use(express_1.default.json());
 (0, index_route_2.default)(app);
 (0, index_route_1.default)(app);
 (0, notification_route_1.default)(app);
+socket.connect(io);
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`server is running at port ${PORT}`);
 });

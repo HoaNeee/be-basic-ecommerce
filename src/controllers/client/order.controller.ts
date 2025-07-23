@@ -7,6 +7,7 @@ import Notification from "../../models/notification.model";
 import { sendMail } from "../../../helpers/sendMail";
 import Customer from "../../models/customer.model";
 import Pagination from "../../../helpers/pagination";
+import { getIo } from "../../../socket";
 
 interface TemplateHTMLOrder {
   cusName: string;
@@ -271,6 +272,7 @@ export const create = async (req: MyRequest, res: Response) => {
     // check setting
 
     //notify -> custommer
+    const io = getIo();
     const notify1 = new Notification({
       user_id: order.user_id,
       type: "order",
@@ -287,6 +289,15 @@ export const create = async (req: MyRequest, res: Response) => {
         sendMail(customer.email, "Đặt hàng thành công", html);
       }
       if (customer.setting.notification || !customer.setting) {
+        io.emit("SERVER_RETURN_USER_PLACED_ORDER", {
+          user_id: order.user_id,
+          title: "Your ordered placed successfully",
+          body: "You place a new order",
+          ref_id: order.orderNo,
+          ref_link: "/profile/orders",
+          image: statusOrder(order.status).image,
+          message: `Your order with orderNo: ${order.orderNo} has been placed successfully!`,
+        });
         await notify1.save();
       }
     }
@@ -301,6 +312,12 @@ export const create = async (req: MyRequest, res: Response) => {
       image: statusOrder(order.status).image,
       receiver: "admin",
     });
+
+    io.emit("SERVER_RETURN_NEW_ORDER", {
+      ...notify2.toObject(),
+      message: `A order just placed with orderNo: ${order.orderNo}, please check it now!`,
+    });
+
     await notify2.save();
 
     res.json({

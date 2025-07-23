@@ -20,6 +20,7 @@ const notification_model_1 = __importDefault(require("../../models/notification.
 const sendMail_1 = require("../../../helpers/sendMail");
 const customer_model_1 = __importDefault(require("../../models/customer.model"));
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
+const socket_1 = require("../../../socket");
 const templateHtml = (order) => {
     const subTotal = order.products.reduce((val, item) => val + item.quantity * item.price, 0);
     return `
@@ -218,6 +219,7 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             createdAt: order.createdAt.toLocaleString(),
             status: order.status,
         });
+        const io = (0, socket_1.getIo)();
         const notify1 = new notification_model_1.default({
             user_id: order.user_id,
             type: "order",
@@ -233,6 +235,15 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 (0, sendMail_1.sendMail)(customer.email, "Đặt hàng thành công", html);
             }
             if (customer.setting.notification || !customer.setting) {
+                io.emit("SERVER_RETURN_USER_PLACED_ORDER", {
+                    user_id: order.user_id,
+                    title: "Your ordered placed successfully",
+                    body: "You place a new order",
+                    ref_id: order.orderNo,
+                    ref_link: "/profile/orders",
+                    image: (0, order_1.statusOrder)(order.status).image,
+                    message: `Your order with orderNo: ${order.orderNo} has been placed successfully!`,
+                });
                 yield notify1.save();
             }
         }
@@ -245,6 +256,7 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             image: (0, order_1.statusOrder)(order.status).image,
             receiver: "admin",
         });
+        io.emit("SERVER_RETURN_NEW_ORDER", Object.assign(Object.assign({}, notify2.toObject()), { message: `A order just placed with orderNo: ${order.orderNo}, please check it now!` }));
         yield notify2.save();
         res.json({
             code: 200,

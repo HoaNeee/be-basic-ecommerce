@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct = exports.edit = exports.create = exports.detail = exports.index = exports.getTopSellHelper = exports.solveOptionSubProduct = exports.solvePriceStock = void 0;
+exports.testSocket = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct = exports.edit = exports.create = exports.detail = exports.index = exports.getTopSellHelper = exports.solveOptionSubProduct = exports.solvePriceStock = void 0;
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const subProductOption_model_1 = __importDefault(require("../../models/subProductOption.model"));
@@ -21,6 +21,7 @@ const variation_model_1 = __importDefault(require("../../models/variation.model"
 const variationOption_model_1 = __importDefault(require("../../models/variationOption.model"));
 const order_model_1 = __importDefault(require("../../models/order.model"));
 const category_model_1 = __importDefault(require("../../models/category.model"));
+const socket_1 = require("../../../socket");
 var ProductType;
 (function (ProductType) {
     ProductType["SIMPLE"] = "simple";
@@ -369,26 +370,54 @@ exports.detail = detail;
 const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { data, subProducts } = req.body;
-        const price = (data === null || data === void 0 ? void 0 : data.price) || 0;
+        const price = data === null || data === void 0 ? void 0 : data.price;
         const stock = (data === null || data === void 0 ? void 0 : data.stock) || 0;
         const product = new product_model_1.default(Object.assign({ price: price, stock: stock }, data));
+        const skus = [(data === null || data === void 0 ? void 0 : data.SKU) || ""];
+        let message = "Create new success!!";
+        const subs = [];
+        const subOptions = [];
         if (subProducts && subProducts.length > 0) {
             for (const item of subProducts) {
                 const subProduct = new subProduct_model_1.default(Object.assign({ product_id: product.id, price: (item === null || item === void 0 ? void 0 : item.price) || 0, stock: (item === null || item === void 0 ? void 0 : item.stock) || 0 }, item));
+                skus.push((item === null || item === void 0 ? void 0 : item.SKU) || "");
+                subs.push(subProduct);
                 for (const it of item.options) {
                     const subProductOption = new subProductOption_model_1.default({
                         sub_product_id: subProduct.id,
                         variation_option_id: it,
                     });
-                    yield subProductOption.save();
+                    subOptions.push(subProductOption);
                 }
-                yield subProduct.save();
+            }
+            const existSkus = yield subProduct_model_1.default.find({
+                SKU: { $in: skus },
+                deleted: false,
+            });
+            for (const subProduct of subs) {
+                const exist = existSkus.find((it) => it.SKU === subProduct.SKU);
+                if (exist || !subProduct.SKU) {
+                    message = "Create new success, but some SKU already exist!!";
+                    exist.SKU = `KAKRIST-SKU-${new Date().getTime()}`;
+                }
             }
         }
-        yield product.save();
+        const existSkus = yield product_model_1.default.find({
+            SKU: { $in: skus },
+            deleted: false,
+        });
+        if (existSkus.length > 0 || !(data === null || data === void 0 ? void 0 : data.SKU)) {
+            product.SKU = `KAKRIST-SKU-${new Date().getTime()}`;
+            message = "Create new success, but some SKU already exist!!";
+        }
+        yield Promise.all([
+            product.save(),
+            subProduct_model_1.default.insertMany(subs),
+            subProductOption_model_1.default.insertMany(subOptions),
+        ]);
         res.json({
             code: 200,
-            message: "Create new success!!",
+            message: message,
             data: product,
         });
     }
@@ -903,3 +932,24 @@ const lowQuantity = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.lowQuantity = lowQuantity;
+const testSocket = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { message } = req.body;
+        const io = (0, socket_1.getIo)();
+        io.emit("SERVER_RETURN_TEST", { message });
+        res.json({
+            code: 200,
+            message: "OK",
+            data: {
+                message: `Received message: ${message}`,
+            },
+        });
+    }
+    catch (error) {
+        res.json({
+            code: 400,
+            message: error.message || error,
+        });
+    }
+});
+exports.testSocket = testSocket;

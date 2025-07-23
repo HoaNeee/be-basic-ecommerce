@@ -50,5 +50,6 @@ router.get("/get-all-sku", controller.getAllSKU);
 router.post("/products-sku", controller.productsSKU);
 router.get("/top-sell", controller.topSell);
 router.get("/low-quantity", controller.lowQuantity);
+router.post("/test-socket", controller.testSocket);
 const productRouter = router;
 exports.default = productRouter;

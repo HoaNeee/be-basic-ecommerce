@@ -7,6 +7,7 @@ import Variation from "../../models/variation.model";
 import VariationOption from "../../models/variationOption.model";
 import Order from "../../models/order.model";
 import Category from "../../models/category.model";
+import { getIo } from "../../../socket";
 
 enum ProductType {
   SIMPLE = "simple",
@@ -454,7 +455,7 @@ export const create = async (req: Request, res: Response) => {
   try {
     const { data, subProducts } = req.body;
 
-    const price = data?.price || 0;
+    const price = data?.price;
     const stock = data?.stock || 0;
 
     const product = new Product({
@@ -463,6 +464,12 @@ export const create = async (req: Request, res: Response) => {
       ...data,
     });
 
+    const skus = [data?.SKU || ""];
+
+    let message = "Create new success!!";
+
+    const subs = [];
+    const subOptions = [];
     if (subProducts && subProducts.length > 0) {
       for (const item of subProducts) {
         const subProduct = new SubProduct({
@@ -471,21 +478,53 @@ export const create = async (req: Request, res: Response) => {
           stock: item?.stock || 0,
           ...item,
         });
+
+        skus.push(item?.SKU || "");
+
+        subs.push(subProduct);
+
         for (const it of item.options) {
           const subProductOption = new SubProductOption({
             sub_product_id: subProduct.id,
             variation_option_id: it,
           });
-          await subProductOption.save();
+          subOptions.push(subProductOption);
         }
-        await subProduct.save();
+      }
+
+      const existSkus = await SubProduct.find({
+        SKU: { $in: skus },
+        deleted: false,
+      });
+
+      for (const subProduct of subs) {
+        const exist = existSkus.find((it) => it.SKU === subProduct.SKU);
+        if (exist || !subProduct.SKU) {
+          message = "Create new success, but some SKU already exist!!";
+          exist.SKU = `KAKRIST-SKU-${new Date().getTime()}`;
+        }
       }
     }
-    await product.save();
+
+    const existSkus = await Product.find({
+      SKU: { $in: skus },
+      deleted: false,
+    });
+
+    if (existSkus.length > 0 || !data?.SKU) {
+      product.SKU = `KAKRIST-SKU-${new Date().getTime()}`;
+      message = "Create new success, but some SKU already exist!!";
+    }
+
+    await Promise.all([
+      product.save(),
+      SubProduct.insertMany(subs),
+      SubProductOption.insertMany(subOptions),
+    ]);
 
     res.json({
       code: 200,
-      message: "Create new success!!",
+      message: message,
       data: product,
     });
   } catch (error) {
@@ -1133,6 +1172,29 @@ export const lowQuantity = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.log(error);
+    res.json({
+      code: 400,
+      message: error.message || error,
+    });
+  }
+};
+
+export const testSocket = async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+
+    const io = getIo();
+
+    io.emit("SERVER_RETURN_TEST", { message });
+
+    res.json({
+      code: 200,
+      message: "OK",
+      data: {
+        message: `Received message: ${message}`,
+      },
+    });
+  } catch (error) {
     res.json({
       code: 400,
       message: error.message || error,

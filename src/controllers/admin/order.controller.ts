@@ -12,6 +12,7 @@ import { sendMail } from "../../../helpers/sendMail";
 import Notification from "../../models/notification.model";
 import Product from "../../models/product.model";
 import SubProduct from "../../models/subProduct.model";
+import { getIo } from "../../../socket";
 
 // [GET] /orders
 export const index = async (req: Request, res: Response) => {
@@ -124,7 +125,13 @@ export const changeStatus = async (req: MyRequest, res: Response) => {
 
     const order = await Order.findOne({ _id: order_id });
 
-    if (status === "confirmed") {
+    const customer = await Customer.findOne({ _id: order.user_id });
+
+    if (!order) {
+      throw Error("Order not found!");
+    }
+
+    if (status === "confirmed" && order.status === "pending") {
       //update stock here;
 
       const skus = order.products.map((item) => item.SKU);
@@ -182,7 +189,20 @@ export const changeStatus = async (req: MyRequest, res: Response) => {
       receiver: "customer",
     });
 
-    await notify1.save();
+    if (customer.setting.notification || !customer.setting) {
+      const io = getIo();
+      io.emit("SERVER_RETURN_CHANGE_STATUS_ORDER", {
+        user_id: order.user_id,
+        title: statusOrder(order.status).title,
+        body: statusOrder(order.status).body,
+        ref_id: order.orderNo,
+        ref_link: "/profile/orders",
+        image: statusOrder(order.status).image,
+        message: `Your order with orderNo: ${order.orderNo} has been placed successfully!`,
+      });
+
+      await notify1.save();
+    }
 
     res.json({
       code: 200,
