@@ -19,6 +19,8 @@ app.use(
       "http://localhost:3000",
       "http://localhost:5173",
       "https://admin-panel-tawny-mu.vercel.app",
+      "https://basic-e-commerce-kkrist.vercel.app",
+      "https://snazzy-chimera-72a2db.netlify.app",
     ],
     credentials: true,
   })

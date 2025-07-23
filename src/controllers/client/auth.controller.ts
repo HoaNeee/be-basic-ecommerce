@@ -41,10 +41,11 @@ export const login = async (req: Request, res: Response) => {
     });
 
     res.cookie("jwt_token", accessToken, {
-      secure: false,
+      secure: true,
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "none",
       path: "/",
+      maxAge: isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined,
     });
 
     res.json({
