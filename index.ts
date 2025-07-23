@@ -12,7 +12,6 @@ database.connect();
 
 const app: Express = express();
 
-const whiteList = ["http://localhost:3000", "*"];
 app.use(
   cors({
     origin: [
@@ -21,7 +20,9 @@ app.use(
       "https://admin-panel-tawny-mu.vercel.app",
       "https://basic-e-commerce-kkrist.vercel.app",
       "https://snazzy-chimera-72a2db.netlify.app",
+      "https://shop.kakrist.site",
     ],
+
     credentials: true,
   })
 );
