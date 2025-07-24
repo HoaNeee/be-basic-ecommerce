@@ -53,6 +53,7 @@ const schema = new mongoose_1.Schema({
         required: true,
     },
     colorText: String,
+    colorBackground: String,
     maxUse: Number,
     thumbnail: String,
     deleted: {

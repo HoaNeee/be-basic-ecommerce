@@ -81,8 +81,8 @@ const templateHtml = (order) => {
           </p>
           <p>
               <span>Chương trình khuyến mãi: </span> 
-              ${(order === null || order === void 0 ? void 0 : order.promotions)
-        ? `Giảm: ${order.promotions.value}`
+              ${(order === null || order === void 0 ? void 0 : order.promotion)
+        ? `Giảm: ${order.promotion.value}`
         : `Không áp dụng`}
           </p>
           <p>
@@ -178,6 +178,7 @@ const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.detail = detail;
 const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
     try {
         const user_id = req.userId;
         const body = req.body;
@@ -218,6 +219,13 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             cusName: `${customer.firstName || "User"} ${customer.lastName || ""}`,
             createdAt: order.createdAt.toLocaleString(),
             status: order.status,
+            promotion: order.promotion
+                ? {
+                    promotionType: (_a = order.promotion) === null || _a === void 0 ? void 0 : _a.promotionType,
+                    value: (_b = order.promotion) === null || _b === void 0 ? void 0 : _b.value,
+                    code: (_c = order.promotion) === null || _c === void 0 ? void 0 : _c.code,
+                }
+                : null,
         });
         const io = (0, socket_1.getIo)();
         const notify1 = new notification_model_1.default({
@@ -301,6 +309,7 @@ const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const order = yield order_model_1.default.findOne({ _id: order_id });
         if (status === "canceled") {
             if (order.status !== "pending") {
+                yield (0, order_1.updateStockWhenOrder)(order, "plus");
             }
             order.cancel = {
                 reasonCancel: req.body.reasonCancel,

@@ -51,6 +51,8 @@ exports.index = index;
 const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const promotion = new promotion_model_1.default(req.body);
+        promotion.colorBackground = req.body.colorBackground || "black";
+        promotion.colorText = req.body.colorText || "black";
         yield promotion.save();
         res.json({
             code: 201,
