@@ -20,6 +20,7 @@ const schema = new Schema(
       required: true,
     },
     colorText: String,
+    colorBackground: String,
     maxUse: Number,
     thumbnail: String,
     deleted: {

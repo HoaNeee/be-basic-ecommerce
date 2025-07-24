@@ -17,7 +17,7 @@ interface TemplateHTMLOrder {
   total: string;
   link: string;
   products: any[];
-  promotions?: {
+  promotion?: {
     promotionType: string;
     value: string;
     code: string;
@@ -91,8 +91,8 @@ const templateHtml = (order: TemplateHTMLOrder) => {
           <p>
               <span>Chương trình khuyến mãi: </span> 
               ${
-                order?.promotions
-                  ? `Giảm: ${order.promotions.value}`
+                order?.promotion
+                  ? `Giảm: ${order.promotion.value}`
                   : `Không áp dụng`
               }
           </p>
@@ -267,6 +267,13 @@ export const create = async (req: MyRequest, res: Response) => {
       cusName: `${customer.firstName || "User"} ${customer.lastName || ""}`,
       createdAt: order.createdAt.toLocaleString(),
       status: order.status,
+      promotion: order.promotion
+        ? {
+            promotionType: order.promotion?.promotionType,
+            value: order.promotion?.value,
+            code: order.promotion?.code,
+          }
+        : null,
     });
 
     // check setting
@@ -372,7 +379,7 @@ export const changeStatus = async (req: MyRequest, res: Response) => {
     if (status === "canceled") {
       if (order.status !== "pending") {
         //update stock here;
-        // await updateStockWhenOrder(order, "plus");
+        await updateStockWhenOrder(order, "plus");
       }
       order.cancel = {
         reasonCancel: req.body.reasonCancel,

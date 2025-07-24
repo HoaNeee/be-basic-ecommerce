@@ -44,6 +44,8 @@ export const index = async (req: Request, res: Response) => {
 export const create = async (req: Request, res: Response) => {
   try {
     const promotion = new Promotion(req.body);
+    promotion.colorBackground = req.body.colorBackground || "black";
+    promotion.colorText = req.body.colorText || "black";
     await promotion.save();
 
     res.json({
