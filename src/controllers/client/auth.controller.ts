@@ -34,12 +34,11 @@ export const login = async (req: Request, res: Response) => {
     });
 
     // res.cookie("jwt_token", accessToken, {
-    //   secure: false, // production -> true
+    //   secure: false,
     //   httpOnly: true,
-    //   sameSite: "lax", // prodduction -> none
+    //   sameSite: "lax",
     //   path: "/",
     //   maxAge: isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined,
-    //   // domain: ".kakrist.site", // -> production
     // });
 
     //production
