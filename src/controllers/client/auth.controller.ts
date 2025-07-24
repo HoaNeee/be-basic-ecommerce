@@ -33,24 +33,24 @@ export const login = async (req: Request, res: Response) => {
       userId: user.id,
     });
 
-    res.cookie("jwt_token", accessToken, {
-      secure: false, // production -> true
-      httpOnly: true,
-      sameSite: "lax", // prodduction -> none
-      path: "/",
-      maxAge: isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined,
-      // domain: ".kakrist.site", // -> production
-    });
-
-    //production
     // res.cookie("jwt_token", accessToken, {
-    //   secure: true,
+    //   secure: false, // production -> true
     //   httpOnly: true,
-    //   sameSite: "none",
+    //   sameSite: "lax", // prodduction -> none
     //   path: "/",
     //   maxAge: isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined,
-    //   domain: ".kakrist.site", // -> production
+    //   // domain: ".kakrist.site", // -> production
     // });
+
+    //production
+    res.cookie("jwt_token", accessToken, {
+      secure: true,
+      httpOnly: true,
+      sameSite: "none",
+      path: "/",
+      maxAge: isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined,
+      domain: ".kakrist.site", // -> production
+    });
 
     res.json({
       code: 200,
