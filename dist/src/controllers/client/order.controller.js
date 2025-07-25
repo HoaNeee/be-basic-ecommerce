@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.changeStatus = exports.editBill = exports.create = exports.detail = exports.index = void 0;
+exports.changeStatus = exports.editBill = exports.create = exports.detail = exports.orders = void 0;
 const order_model_1 = __importDefault(require("../../models/order.model"));
 const cartDetail_model_1 = __importDefault(require("../../models/cartDetail.model"));
 const order_1 = require("../../../utils/order");
@@ -91,7 +91,7 @@ const templateHtml = (order) => {
 
           <p>
               Bạn có thể xem chi tiết đơn hàng tại:
-              <a href="http://localhost:3000${order.link}">Xem đơn hàng</a>.
+              <a href="https://shop.kakrist.site${order.link}">Xem đơn hàng</a>.
           </p>
 
           <p>Xin cảm ơn bạn đã mua sắm cùng <strong>Kkrist</strong>!</p>
@@ -108,7 +108,7 @@ const templateHtml = (order) => {
     </html>
   `;
 };
-const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const orders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user_id = req.userId;
         let find = {
@@ -154,7 +154,7 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
 });
-exports.index = index;
+exports.orders = orders;
 const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const order_no = req.params.order_no;

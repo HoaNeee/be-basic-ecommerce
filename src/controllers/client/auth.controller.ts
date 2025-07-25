@@ -176,7 +176,18 @@ export const getInfo = async (req: MyRequest, res: Response) => {
 // [POST] /auth/logout
 export const logout = async (req: Request, res: Response) => {
   try {
-    res.clearCookie("jwt_token");
+    // res.clearCookie("jwt_token", {
+    //   path: "/",
+    // });
+
+    // //production
+    res.clearCookie("jwt_token", {
+      secure: true,
+      httpOnly: true,
+      sameSite: "none",
+      path: "/",
+      domain: ".kakrist.site", // -> production
+    });
 
     res.json({
       code: 200,

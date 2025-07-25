@@ -458,6 +458,8 @@ export const create = async (req: Request, res: Response) => {
     const price = data?.price;
     const stock = data?.stock || 0;
 
+    console.log(data);
+
     const product = new Product({
       price: price,
       stock: stock,
@@ -555,13 +557,14 @@ export const edit = async (req: Request, res: Response) => {
         break;
       case ProductType.VARIATION:
         //something...
-        req.body.price = 0;
+        req.body.price = null;
         break;
       default:
         throw Error("Type of product is not correct!");
     }
 
-    req.body.price = req.body?.price || 0;
+    req.body.stock = req.body?.stock || 0;
+    console.log(req.body);
 
     await Product.updateOne({ _id: product_id }, req.body);
 
@@ -612,7 +615,7 @@ export const editSubProduct = async (req: Request, res: Response) => {
         await SubProduct.updateOne(
           { _id: item.sub_product_id },
           {
-            price: item?.price || 0,
+            price: item?.price || null,
             stock: item?.stock || 0,
             thumbnail: item?.thumbnail || "",
             discountedPrice: item?.discountedPrice || null,

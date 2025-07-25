@@ -13,6 +13,7 @@ import orderRouter from "./order.route";
 import reportRouter from "./report.route";
 import customerRoute from "./customer.route";
 import reviewRoute from "./review.route";
+import blogRouter from "./blog.route";
 
 const route = (app: Express) => {
   const path = "/admin";
@@ -31,6 +32,7 @@ const route = (app: Express) => {
   app.use(path + "/reports", auth.isAccess, reportRouter);
   app.use(path + "/customers", auth.isAccess, customerRoute);
   app.use(path + "/reviews", auth.isAccess, reviewRoute);
+  app.use(path + "/blogs", auth.isAccess, blogRouter);
 };
 
 export default route;

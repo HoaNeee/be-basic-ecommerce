@@ -372,6 +372,7 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const { data, subProducts } = req.body;
         const price = data === null || data === void 0 ? void 0 : data.price;
         const stock = (data === null || data === void 0 ? void 0 : data.stock) || 0;
+        console.log(data);
         const product = new product_model_1.default(Object.assign({ price: price, stock: stock }, data));
         const skus = [(data === null || data === void 0 ? void 0 : data.SKU) || ""];
         let message = "Create new success!!";
@@ -443,12 +444,13 @@ const edit = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             case ProductType.SIMPLE:
                 break;
             case ProductType.VARIATION:
-                req.body.price = 0;
+                req.body.price = null;
                 break;
             default:
                 throw Error("Type of product is not correct!");
         }
-        req.body.price = ((_a = req.body) === null || _a === void 0 ? void 0 : _a.price) || 0;
+        req.body.stock = ((_a = req.body) === null || _a === void 0 ? void 0 : _a.stock) || 0;
+        console.log(req.body);
         yield product_model_1.default.updateOne({ _id: product_id }, req.body);
         res.json({
             code: 200,
@@ -482,7 +484,7 @@ const editSubProduct = (req, res) => __awaiter(void 0, void 0, void 0, function*
         for (const item of subProducts) {
             if (item.sub_product_id) {
                 yield subProduct_model_1.default.updateOne({ _id: item.sub_product_id }, {
-                    price: (item === null || item === void 0 ? void 0 : item.price) || 0,
+                    price: (item === null || item === void 0 ? void 0 : item.price) || null,
                     stock: (item === null || item === void 0 ? void 0 : item.stock) || 0,
                     thumbnail: (item === null || item === void 0 ? void 0 : item.thumbnail) || "",
                     discountedPrice: (item === null || item === void 0 ? void 0 : item.discountedPrice) || null,

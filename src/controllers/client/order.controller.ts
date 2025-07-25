@@ -102,7 +102,7 @@ const templateHtml = (order: TemplateHTMLOrder) => {
 
           <p>
               Bạn có thể xem chi tiết đơn hàng tại:
-              <a href="http://localhost:3000${order.link}">Xem đơn hàng</a>.
+              <a href="https://shop.kakrist.site${order.link}">Xem đơn hàng</a>.
           </p>
 
           <p>Xin cảm ơn bạn đã mua sắm cùng <strong>Kkrist</strong>!</p>
@@ -120,8 +120,8 @@ const templateHtml = (order: TemplateHTMLOrder) => {
   `;
 };
 
-// [GET] /order
-export const index = async (req: MyRequest, res: Response) => {
+// [GET] /orders
+export const orders = async (req: MyRequest, res: Response) => {
   try {
     const user_id = req.userId;
 
@@ -176,7 +176,7 @@ export const index = async (req: MyRequest, res: Response) => {
   }
 };
 
-// [GET] /order/detail/:order_no
+// [GET] /orders/detail/:order_no
 export const detail = async (req: MyRequest, res: Response) => {
   try {
     const order_no = req.params.order_no;
@@ -201,7 +201,7 @@ export const detail = async (req: MyRequest, res: Response) => {
   }
 };
 
-// [POST] /order/create
+// [POST] /orders/create
 export const create = async (req: MyRequest, res: Response) => {
   try {
     const user_id = req.userId;
@@ -341,7 +341,7 @@ export const create = async (req: MyRequest, res: Response) => {
   }
 };
 
-// [PATCH] /order/edit/:id
+// [PATCH] /orders/edit/:id
 export const editBill = async (req: MyRequest, res: Response) => {
   try {
     const user_id = req.userId;
@@ -365,7 +365,7 @@ export const editBill = async (req: MyRequest, res: Response) => {
   }
 };
 
-// [PATCH] /order/change-status/:id
+// [PATCH] /orders/change-status/:id
 export const changeStatus = async (req: MyRequest, res: Response) => {
   try {
     // const user_id = req.userId;

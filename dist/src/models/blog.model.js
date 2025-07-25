@@ -32,14 +32,37 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const controller = __importStar(require("../../controllers/client/order.controller"));
-const router = (0, express_1.Router)();
-router.get("/", controller.orders);
-router.get("/detail/:order_no", controller.detail);
-router.post("/create", controller.create);
-router.patch("/edit/:id", controller.editBill);
-router.patch("/change-status/:id", controller.changeStatus);
-const orderRouter = router;
-exports.default = orderRouter;
+const mongoose_slug_updater_1 = __importDefault(require("mongoose-slug-updater"));
+const mongoose_1 = __importStar(require("mongoose"));
+mongoose_1.default.plugin(mongoose_slug_updater_1.default);
+const schema = new mongoose_1.Schema({
+    user_id: {
+        type: String,
+        required: true,
+    },
+    title: String,
+    excerpt: String,
+    content: String,
+    image: String,
+    slug: {
+        type: String,
+        slug: "title",
+        unique: true,
+    },
+    view: Number,
+    liked: [String],
+    tags: [String],
+    readTime: Number,
+    status: String,
+    deleted: {
+        type: Boolean,
+        default: false,
+    },
+    deletedAt: String,
+}, { timestamps: true });
+const Blog = mongoose_1.default.model("Blog", schema, "blogs");
+exports.default = Blog;

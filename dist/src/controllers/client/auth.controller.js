@@ -152,7 +152,13 @@ const getInfo = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 exports.getInfo = getInfo;
 const logout = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        res.clearCookie("jwt_token");
+        res.clearCookie("jwt_token", {
+            secure: true,
+            httpOnly: true,
+            sameSite: "none",
+            path: "/",
+            domain: ".kakrist.site",
+        });
         res.json({
             code: 200,
             message: "Logout success!",
