@@ -18,14 +18,24 @@ const isAccess = (req, res, next) => __awaiter(void 0, void 0, void 0, function*
     try {
         const token = req.cookies.jwt_token;
         if (!token) {
-            throw Error("Missing token!!");
+            res.json({
+                code: 401,
+                message: "You are not logged in!",
+            });
+            return;
         }
         const decoded = jsonwebtoken_1.default.verify(token, process.env.SECRET_JWT_KEY);
         req.userId = decoded.userId;
         next();
     }
     catch (error) {
-        res.clearCookie("jwt_token");
+        res.clearCookie("jwt_token", {
+            secure: true,
+            httpOnly: true,
+            sameSite: "none",
+            path: "/",
+            domain: ".kakrist.site",
+        });
         res.json({
             code: 402,
             message: error.message,

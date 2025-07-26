@@ -33,17 +33,18 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const controller = __importStar(require("../../controllers/admin/blog.controller"));
-const router = (0, express_1.Router)();
-router.get("/", controller.blogs);
-router.get("/stats", controller.stats);
-router.get("/tags", controller.blogTags);
-router.delete("/tags/:tag", controller.removeTag);
-router.patch("/change-multi", controller.changeMulti);
-router.post("/", controller.create);
-router.get("/:id", controller.blogDetail);
-router.patch("/:id", controller.update);
-router.delete("/:id", controller.remove);
-const blogRouter = router;
-exports.default = blogRouter;
+const mongoose_1 = __importStar(require("mongoose"));
+const schema = new mongoose_1.Schema({
+    user_id: {
+        type: String,
+        required: true,
+    },
+    blogs: [String],
+    deleted: {
+        type: Boolean,
+        default: false,
+    },
+    deletedAt: String,
+}, { timestamps: true });
+const BlogSaved = mongoose_1.default.model("BlogSaved", schema, "blog-saveds");
+exports.default = BlogSaved;

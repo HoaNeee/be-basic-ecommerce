@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.changeMulti = exports.stats = exports.remove = exports.update = exports.create = exports.blogTags = exports.blogDetail = exports.blogs = void 0;
+exports.removeTag = exports.changeMulti = exports.stats = exports.remove = exports.update = exports.create = exports.blogTags = exports.blogDetail = exports.blogs = void 0;
 const blog_model_1 = __importDefault(require("../../models/blog.model"));
 const blogs = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -263,3 +263,33 @@ function calculateReadTime(content) {
     const words = content.split(/\s+/).length;
     return Math.ceil(words / wordsPerMinute);
 }
+const removeTag = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { tag } = req.params;
+        if (!tag) {
+            res.json({
+                code: 400,
+                message: "Tag is required",
+            });
+            return;
+        }
+        yield blog_model_1.default.updateMany({
+            tags: tag,
+            deleted: false,
+        }, {
+            $pull: { tags: tag },
+        });
+        res.json({
+            code: 200,
+            message: "Tag deleted successfully",
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            code: 500,
+            message: error.message,
+        });
+    }
+});
+exports.removeTag = removeTag;

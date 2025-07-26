@@ -14,7 +14,11 @@ export const isAccess = async (
     const token = req.cookies.jwt_token;
 
     if (!token) {
-      throw Error("Missing token!!");
+      res.json({
+        code: 401,
+        message: "You are not logged in!",
+      });
+      return;
     }
 
     const decoded: any = jwt.verify(token, process.env.SECRET_JWT_KEY);
@@ -23,7 +27,19 @@ export const isAccess = async (
 
     next();
   } catch (error) {
-    res.clearCookie("jwt_token");
+    // res.clearCookie("jwt_token", {
+    //   path: "/",
+    // });
+
+    // //production
+    res.clearCookie("jwt_token", {
+      secure: true,
+      httpOnly: true,
+      sameSite: "none",
+      path: "/",
+      domain: ".kakrist.site", // -> production
+    });
+
     res.json({
       code: 402,
       message: error.message,
