@@ -31,6 +31,13 @@ const schema = new Schema(
   { timestamps: true }
 );
 
+schema.index({
+  title: "text",
+  excerpt: "text",
+  content: "text",
+  tags: "text",
+});
+
 const Blog = mongoose.model("Blog", schema, "blogs");
 
 export default Blog;

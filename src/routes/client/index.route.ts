@@ -13,6 +13,7 @@ import paymentRouter from "./pament.route";
 import orderRouter from "./order.route";
 import favoriteRouter from "./favorite.route";
 import blogRouter from "./blog.route";
+import searchRouter from "./search.route";
 
 const ClientRoute = (app: Express) => {
   app.use("/auth", authRouter);
@@ -22,6 +23,7 @@ const ClientRoute = (app: Express) => {
   app.use("/reviews", reviewRouter);
   app.use("/suppliers", supplierRouter);
   app.use("/blogs", blogRouter);
+  app.use("/search", searchRouter);
 
   app.use("/cart", authMiddleware.isAccess, cartRouter);
   app.use("/address", authMiddleware.isAccess, addressRouter);

@@ -189,6 +189,8 @@ export const changeStatus = async (req: MyRequest, res: Response) => {
       receiver: "customer",
     });
 
+    await notify1.save();
+
     if (customer.setting.notification || !customer.setting) {
       const io = getIo();
       io.emit("SERVER_RETURN_CHANGE_STATUS_ORDER", {
@@ -200,8 +202,6 @@ export const changeStatus = async (req: MyRequest, res: Response) => {
         image: statusOrder(order.status).image,
         message: `Your order with orderNo: ${order.orderNo} has been placed successfully!`,
       });
-
-      await notify1.save();
     }
 
     res.json({

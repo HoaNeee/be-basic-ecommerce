@@ -64,5 +64,11 @@ const schema = new mongoose_1.Schema({
     },
     deletedAt: String,
 }, { timestamps: true });
+schema.index({
+    title: "text",
+    excerpt: "text",
+    content: "text",
+    tags: "text",
+});
 const Blog = mongoose_1.default.model("Blog", schema, "blogs");
 exports.default = Blog;

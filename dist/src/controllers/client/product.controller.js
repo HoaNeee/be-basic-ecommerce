@@ -260,7 +260,7 @@ const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 response.push(arrMerge[i]);
             }
             res.json({
-                messgae: "OK",
+                message: "OK",
                 data: {
                     products: response,
                     totalRecord: totalRecord,

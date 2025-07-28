@@ -322,7 +322,7 @@ export const products = async (req: Request, res: Response) => {
       }
 
       res.json({
-        messgae: "OK",
+        message: "OK",
         data: {
           products: response,
           totalRecord: totalRecord,
@@ -712,23 +712,6 @@ export const filterProduct = async (req: Request, res: Response) => {
 //[GET] /products/best-seller
 export const getBestSeller = async (req: Request, res: Response) => {
   try {
-    // const products = await Product.find({ deleted: false }).limit(8).lean();
-
-    // for (const product of products) {
-    //   if (product.productType === ProductType.VARIATION) {
-    //     const subProducts = await SubProduct.find({
-    //       deleted: false,
-    //       product_id: product._id,
-    //     });
-
-    //     if (subProducts.length > 0) {
-    //       solvePriceStock(product, subProducts);
-    //     }
-    //   }
-    //   const supplier = await Supplier.findOne({ _id: product.supplier_id });
-    //   product["supplierName"] = supplier.name;
-    // }
-
     const { products_info } = await getTopSellHelper(req);
 
     for (const product of products_info) {

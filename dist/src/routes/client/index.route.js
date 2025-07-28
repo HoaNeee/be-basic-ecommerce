@@ -50,6 +50,7 @@ const pament_route_1 = __importDefault(require("./pament.route"));
 const order_route_1 = __importDefault(require("./order.route"));
 const favorite_route_1 = __importDefault(require("./favorite.route"));
 const blog_route_1 = __importDefault(require("./blog.route"));
+const search_route_1 = __importDefault(require("./search.route"));
 const ClientRoute = (app) => {
     app.use("/auth", auth_route_1.default);
     app.use("/categories", category_route_1.default);
@@ -58,6 +59,7 @@ const ClientRoute = (app) => {
     app.use("/reviews", review_route_1.default);
     app.use("/suppliers", supplier_route_1.default);
     app.use("/blogs", blog_route_1.default);
+    app.use("/search", search_route_1.default);
     app.use("/cart", authMiddleware.isAccess, cart_route_1.default);
     app.use("/address", authMiddleware.isAccess, address_route_1.default);
     app.use("/payments", authMiddleware.isAccess, pament_route_1.default);

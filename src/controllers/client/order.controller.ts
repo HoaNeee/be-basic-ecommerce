@@ -305,8 +305,8 @@ export const create = async (req: MyRequest, res: Response) => {
           image: statusOrder(order.status).image,
           message: `Your order with orderNo: ${order.orderNo} has been placed successfully!`,
         });
-        await notify1.save();
       }
+      await notify1.save();
     }
 
     const notify2 = new Notification({

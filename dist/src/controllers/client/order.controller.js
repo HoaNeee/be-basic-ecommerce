@@ -252,8 +252,8 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     image: (0, order_1.statusOrder)(order.status).image,
                     message: `Your order with orderNo: ${order.orderNo} has been placed successfully!`,
                 });
-                yield notify1.save();
             }
+            yield notify1.save();
         }
         const notify2 = new notification_model_1.default({
             type: "order",

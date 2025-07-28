@@ -187,6 +187,7 @@ const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             image: (0, order_1.statusOrder)(order.status).image,
             receiver: "customer",
         });
+        yield notify1.save();
         if (customer.setting.notification || !customer.setting) {
             const io = (0, socket_1.getIo)();
             io.emit("SERVER_RETURN_CHANGE_STATUS_ORDER", {
@@ -198,7 +199,6 @@ const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 image: (0, order_1.statusOrder)(order.status).image,
                 message: `Your order with orderNo: ${order.orderNo} has been placed successfully!`,
             });
-            yield notify1.save();
         }
         res.json({
             code: 200,

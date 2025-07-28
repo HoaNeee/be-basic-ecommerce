@@ -46,6 +46,14 @@ const schema = new Schema(
   { timestamps: true }
 );
 
+schema.index({
+  title: "text",
+  content: "text",
+  shortDescription: "text",
+  categories: "text",
+  SKU: "text",
+});
+
 const Product = mongoose.model("Product", schema, "products");
 
 export default Product;

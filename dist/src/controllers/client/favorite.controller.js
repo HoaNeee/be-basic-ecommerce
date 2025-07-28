@@ -12,22 +12,30 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.removeProduct = exports.addProduct = exports.getListFavoriteInfo = exports.index = void 0;
+exports.removeBlog = exports.addBlog = exports.getListBlogSavedInfo = exports.removeProduct = exports.addProduct = exports.getListFavoriteInfo = exports.products = void 0;
 const product_model_1 = __importDefault(require("../../models/product.model"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const favorite_model_1 = __importDefault(require("../../models/favorite.model"));
 const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
 const product_1 = require("../../../utils/product");
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
-const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const blogSaved_model_1 = __importDefault(require("../../models/blogSaved.model"));
+const blog_model_1 = __importDefault(require("../../models/blog.model"));
+const user_model_1 = __importDefault(require("../../models/user.model"));
+const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user_id = req.userId;
         const list = yield favorite_model_1.default.findOne({ user_id: user_id, deleted: false });
+        const listBlog = yield blogSaved_model_1.default.findOne({
+            user_id: user_id,
+            deleted: false,
+        });
         res.json({
             code: 200,
             message: "OK",
             data: {
-                list,
+                list: list,
+                listBlog: listBlog,
             },
         });
     }
@@ -39,7 +47,7 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
 });
-exports.index = index;
+exports.products = products;
 const getListFavoriteInfo = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user_id = req.userId;
@@ -169,3 +177,129 @@ const removeProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.removeProduct = removeProduct;
+const getListBlogSavedInfo = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const user_id = req.userId;
+        const list = yield blogSaved_model_1.default.findOne({ user_id: user_id, deleted: false });
+        if (!list) {
+            res.json({
+                code: 200,
+                message: "OK",
+                data: {
+                    blogs: [],
+                },
+            });
+            return;
+        }
+        const blog_ids = list.blogs;
+        const totalRecord = yield blog_model_1.default.countDocuments({
+            _id: { $in: blog_ids },
+            deleted: false,
+        });
+        const initPagination = {
+            page: 1,
+            limitItems: totalRecord,
+        };
+        if (req.query.limit) {
+            initPagination.limitItems = Number(req.query.limit);
+        }
+        const objectPagination = (0, pagination_1.default)(initPagination, req.query, totalRecord);
+        const blogs = yield blog_model_1.default.find({
+            _id: { $in: blog_ids },
+            deleted: false,
+        })
+            .skip(objectPagination.skip)
+            .limit(objectPagination.limitItems)
+            .lean();
+        const userIds = blogs.map((item) => item.user_id);
+        const user = yield user_model_1.default.find({ _id: { $in: userIds } });
+        for (const blog of blogs) {
+            const author = user.find((item) => item._id.toString() === blog.user_id.toString()) ||
+                null;
+            delete blog.user_id;
+            if (author) {
+                blog["author"] = {
+                    fullName: author.fullName,
+                    avatar: author.avatar,
+                };
+            }
+        }
+        res.json({
+            code: 200,
+            message: "Blogs info OK!",
+            data: {
+                blogs,
+                totalRecord,
+                totalPage: objectPagination.totalPage,
+            },
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.json({
+            code: 400,
+            message: error.message || error,
+        });
+    }
+});
+exports.getListBlogSavedInfo = getListBlogSavedInfo;
+const addBlog = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const user_id = req.userId;
+        const body = req.body;
+        const list = body.listBlog;
+        const blogSaveds = yield blogSaved_model_1.default.findOne({ user_id: user_id });
+        if (!blogSaveds) {
+            const newBlogSaved = new blogSaved_model_1.default({
+                blogs: list,
+                user_id: user_id,
+            });
+            yield newBlogSaved.save();
+        }
+        else {
+            blogSaveds.blogs = [...list];
+            yield blogSaveds.save();
+        }
+        res.json({
+            code: 200,
+            message: "Added!",
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.addBlog = addBlog;
+const removeBlog = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const user_id = req.userId;
+        const blog_id = req.params.blog_id;
+        if (!blog_id) {
+            throw Error("Missing blog_id");
+        }
+        const blogSaveds = yield blogSaved_model_1.default.findOneAndUpdate({ user_id: user_id }, { $pull: { blogs: blog_id } });
+        if (!blogSaveds) {
+            res.json({
+                code: 404,
+                message: "Not found!",
+            });
+            return;
+        }
+        res.json({
+            code: 200,
+            message: "Removed!",
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.removeBlog = removeBlog;
