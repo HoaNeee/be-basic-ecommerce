@@ -33,7 +33,7 @@ const io = new Server(server, {
   },
 });
 
-app.set("trust proxy", 1); // trust first proxy for secure cookies
+app.set("trust proxy", 1);
 
 app.use(
   cors({
@@ -50,13 +50,17 @@ app.use(
     secret: process.env.SESSION_SECRET,
     resave: true,
     saveUninitialized: false,
-    cookie: {
-      // secure: false,
-      secure: true,
-      httpOnly: true,
-      sameSite: "none",
-      domain: ".kakrist.site",
-    },
+    cookie:
+      process.env.NODE_ENV === "production"
+        ? {
+            secure: process.env.NODE_ENV === "production",
+            httpOnly: true,
+            sameSite: "none",
+            domain: ".kakrist.site",
+          }
+        : {
+            secure: false,
+          },
   })
 );
 

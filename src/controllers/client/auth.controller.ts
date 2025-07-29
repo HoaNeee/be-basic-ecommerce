@@ -6,10 +6,15 @@ import { MyRequest } from "../../middlewares/client/auth.middleware";
 import Cart from "../../models/cart.model";
 import Notification from "../../models/notification.model";
 
+let enviroment = process.env.NODE_ENV || "dev";
+
 export const clearCookie = (res: Response) => {
-  // res.clearCookie("jwt_token", {
-  //   path: "/",
-  // });
+  if (enviroment === "dev") {
+    res.clearCookie("jwt_token", {
+      path: "/",
+    });
+    return;
+  }
 
   //production
   res.clearCookie("jwt_token", {
@@ -22,13 +27,16 @@ export const clearCookie = (res: Response) => {
 };
 
 const setCookie = (res: Response, accessToken: string, maxAge?: number) => {
-  // res.cookie("jwt_token", accessToken, {
-  //   secure: false,
-  //   httpOnly: true,
-  //   sameSite: "lax",
-  //   path: "/",
-  //   maxAge: maxAge || undefined,
-  // });
+  if (enviroment === "dev") {
+    res.cookie("jwt_token", accessToken, {
+      secure: false,
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: maxAge || undefined,
+    });
+    return;
+  }
 
   //production
   res.cookie("jwt_token", accessToken, {
@@ -473,8 +481,10 @@ const handleInfoUser = async (code: string) => {
   //link info https://www.googleapis.com/oauth2/v3/userinfo
 
   try {
-    const uri = "https://localhost:3000/auth/google";
-    // const uri = "https://shop.kakrist.site/auth/google";
+    const uri =
+      enviroment === "dev"
+        ? "https://localhost:3000/auth/google"
+        : "https://shop.kakrist.site/auth/google";
 
     const params = new URLSearchParams({
       code,

@@ -18,7 +18,14 @@ const md5_1 = __importDefault(require("md5"));
 const customer_model_1 = __importDefault(require("../../models/customer.model"));
 const cart_model_1 = __importDefault(require("../../models/cart.model"));
 const notification_model_1 = __importDefault(require("../../models/notification.model"));
+let enviroment = process.env.NODE_ENV || "dev";
 const clearCookie = (res) => {
+    if (enviroment === "dev") {
+        res.clearCookie("jwt_token", {
+            path: "/",
+        });
+        return;
+    }
     res.clearCookie("jwt_token", {
         secure: true,
         httpOnly: true,
@@ -29,6 +36,16 @@ const clearCookie = (res) => {
 };
 exports.clearCookie = clearCookie;
 const setCookie = (res, accessToken, maxAge) => {
+    if (enviroment === "dev") {
+        res.cookie("jwt_token", accessToken, {
+            secure: false,
+            httpOnly: true,
+            sameSite: "lax",
+            path: "/",
+            maxAge: maxAge || undefined,
+        });
+        return;
+    }
     res.cookie("jwt_token", accessToken, {
         secure: true,
         httpOnly: true,
@@ -383,7 +400,9 @@ const googleLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 exports.googleLogin = googleLogin;
 const handleInfoUser = (code) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const uri = "https://localhost:3000/auth/google";
+        const uri = enviroment === "dev"
+            ? "https://localhost:3000/auth/google"
+            : "https://shop.kakrist.site/auth/google";
         const params = new URLSearchParams({
             code,
             client_id: process.env.GOOGLE_CLIENT_ID || "",

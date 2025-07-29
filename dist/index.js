@@ -77,12 +77,16 @@ app.use((0, express_session_1.default)({
     secret: process.env.SESSION_SECRET,
     resave: true,
     saveUninitialized: false,
-    cookie: {
-        secure: true,
-        httpOnly: true,
-        sameSite: "none",
-        domain: ".kakrist.site",
-    },
+    cookie: process.env.NODE_ENV === "production"
+        ? {
+            secure: process.env.NODE_ENV === "production",
+            httpOnly: true,
+            sameSite: "none",
+            domain: ".kakrist.site",
+        }
+        : {
+            secure: false,
+        },
 }));
 (0, index_route_2.default)(app);
 (0, index_route_1.default)(app);
