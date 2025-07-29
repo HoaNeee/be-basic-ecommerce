@@ -14,6 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isAccess = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const auth_controller_1 = require("../../controllers/client/auth.controller");
 const isAccess = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const token = req.cookies.jwt_token;
@@ -29,13 +30,7 @@ const isAccess = (req, res, next) => __awaiter(void 0, void 0, void 0, function*
         next();
     }
     catch (error) {
-        res.clearCookie("jwt_token", {
-            secure: true,
-            httpOnly: true,
-            sameSite: "none",
-            path: "/",
-            domain: ".kakrist.site",
-        });
+        (0, auth_controller_1.clearCookie)(res);
         res.json({
             code: 402,
             message: error.message,

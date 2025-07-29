@@ -13,10 +13,24 @@ const schema = new mongoose_1.default.Schema({
     },
     password: {
         type: String,
-        required: true,
+        required: false,
     },
     avatar: String,
     phone: String,
+    provider: {
+        type: String,
+        enum: ["local", "google"],
+        default: "local",
+    },
+    providerId: String,
+    social: {
+        type: {
+            google: Boolean,
+        },
+        default: {
+            google: false,
+        },
+    },
     status: {
         type: String,
         default: "active",

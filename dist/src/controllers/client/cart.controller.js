@@ -21,7 +21,13 @@ const variationOption_model_1 = __importDefault(require("../../models/variationO
 const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user_id = req.userId;
-        const cart = yield cart_model_1.default.findOne({ user_id: user_id }).select("-deleted -deletedAt");
+        let cart = yield cart_model_1.default.findOne({ user_id: user_id }).select("-deleted -deletedAt");
+        if (!cart) {
+            cart = new cart_model_1.default({
+                user_id: user_id,
+            });
+            yield cart.save();
+        }
         const cartItems = yield cartDetail_model_1.default.find({ cart_id: cart.id }).lean();
         const productIds = cartItems.map((item) => item.product_id);
         const subIds = cartItems.map((item) => item.sub_product_id);

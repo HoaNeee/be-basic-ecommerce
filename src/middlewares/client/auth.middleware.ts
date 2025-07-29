@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { clearCookie } from "../../controllers/client/auth.controller";
 
 export interface MyRequest extends Request {
   userId: string;
@@ -27,18 +28,7 @@ export const isAccess = async (
 
     next();
   } catch (error) {
-    // res.clearCookie("jwt_token", {
-    //   path: "/",
-    // });
-
-    // //production
-    res.clearCookie("jwt_token", {
-      secure: true,
-      httpOnly: true,
-      sameSite: "none",
-      path: "/",
-      domain: ".kakrist.site", // -> production
-    });
+    clearCookie(res);
 
     res.json({
       code: 402,

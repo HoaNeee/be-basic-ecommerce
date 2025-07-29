@@ -6,6 +6,21 @@ import { MyRequest } from "../../middlewares/client/auth.middleware";
 import Cart from "../../models/cart.model";
 import Notification from "../../models/notification.model";
 
+export const clearCookie = (res: Response) => {
+  // res.clearCookie("jwt_token", {
+  //   path: "/",
+  // });
+
+  //production
+  res.clearCookie("jwt_token", {
+    secure: true,
+    httpOnly: true,
+    sameSite: "none",
+    path: "/",
+    domain: ".kakrist.site",
+  });
+};
+
 const setCookie = (res: Response, accessToken: string, maxAge?: number) => {
   // res.cookie("jwt_token", accessToken, {
   //   secure: false,
@@ -197,18 +212,7 @@ export const getInfo = async (req: MyRequest, res: Response) => {
 // [POST] /auth/logout
 export const logout = async (req: Request, res: Response) => {
   try {
-    // res.clearCookie("jwt_token", {
-    //   path: "/",
-    // });
-
-    //production
-    res.clearCookie("jwt_token", {
-      secure: true,
-      httpOnly: true,
-      sameSite: "none",
-      path: "/",
-      domain: ".kakrist.site",
-    });
+    clearCookie(res);
 
     res.json({
       code: 200,
@@ -455,11 +459,14 @@ const handleInfoUser = async (code: string) => {
   //link info https://www.googleapis.com/oauth2/v3/userinfo
 
   try {
+    // const uri = 'https://localhost:3000/auth/google';
+    const uri = "https://shop.kakrist.site/auth/google";
+
     const params = new URLSearchParams({
       code,
       client_id: process.env.GOOGLE_CLIENT_ID || "",
       client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
-      redirect_uri: "http://localhost:3000/auth/google",
+      redirect_uri: uri,
       grant_type: "authorization_code",
     });
 

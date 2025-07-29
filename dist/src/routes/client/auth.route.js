@@ -40,6 +40,7 @@ const router = (0, express_1.Router)();
 router.post("/login", controller.login);
 router.post("/register", controller.register);
 router.post("/logout", controller.logout);
+router.post("/google", controller.googleLogin);
 router.get("/profile", authMiddleware.isAccess, controller.getInfo);
 router.patch("/profile/change-password", authMiddleware.isAccess, controller.changePassword);
 router.patch("/profile/edit", authMiddleware.isAccess, controller.updateProfile);
