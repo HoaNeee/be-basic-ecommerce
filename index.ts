@@ -48,7 +48,12 @@ app.use(
     secret: process.env.SESSION_SECRET,
     resave: true,
     saveUninitialized: false,
-    cookie: { secure: false },
+    cookie: {
+      secure: true,
+      httpOnly: true,
+      sameSite: "none",
+      domain: ".kakrist.site",
+    },
   })
 );
 
