@@ -33,6 +33,8 @@ const io = new Server(server, {
   },
 });
 
+app.set("trust proxy", 1); // trust first proxy for secure cookies
+
 app.use(
   cors({
     origin: whiteList,
@@ -49,6 +51,7 @@ app.use(
     resave: true,
     saveUninitialized: false,
     cookie: {
+      // secure: false,
       secure: true,
       httpOnly: true,
       sameSite: "none",

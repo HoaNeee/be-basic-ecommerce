@@ -65,6 +65,7 @@ const io = new socket_io_1.Server(server, {
         credentials: true,
     },
 });
+app.set("trust proxy", 1);
 app.use((0, cors_1.default)({
     origin: whiteList,
     credentials: true,
