@@ -40,7 +40,7 @@ const setCookie = (res, accessToken, maxAge) => {
 };
 const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { email, password, isRemember } = req.body;
+        const { email, password, isRemmember } = req.body;
         const user = yield customer_model_1.default.findOne({ email: email, deleted: false });
         if (!user) {
             throw Error("Email not found!!");
@@ -58,7 +58,8 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const accessToken = (0, getAccessToken_1.getAccessToken)({
             userId: user.id,
         });
-        setCookie(res, accessToken, isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined);
+        setCookie(res, accessToken, isRemmember ? 1000 * 60 * 60 * 24 * 15 : undefined);
+        req.session["has_welcome"] = false;
         res.json({
             code: 200,
             message: "Login success!",
@@ -159,10 +160,17 @@ const getInfo = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         if (!customer) {
             throw Error("Not allowed!");
         }
+        if (req.session["has_welcome"] === undefined ||
+            req.session["has_welcome"] === null) {
+            req.session["has_welcome"] = true;
+        }
+        else {
+            req.session["has_welcome"] = false;
+        }
         res.json({
             code: 200,
             message: "Get info OK!",
-            data: Object.assign(Object.assign({}, customer), { user_id: customer._id }),
+            data: Object.assign(Object.assign({}, customer), { user_id: customer._id, has_welcome: req.session["has_welcome"] }),
         });
     }
     catch (error) {
@@ -274,6 +282,7 @@ const googleLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             deleted: false,
         });
         const timeCookie = 1000 * 60 * 60 * 24 * 5;
+        req.session["has_welcome"] = false;
         if (exist) {
             if (exist.provider === "google" && exist.providerId === providerId) {
                 yield customer_model_1.default.updateOne({
@@ -374,7 +383,7 @@ const googleLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 exports.googleLogin = googleLogin;
 const handleInfoUser = (code) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const uri = "https://shop.kakrist.site/auth/google";
+        const uri = "https://localhost:3000/auth/google";
         const params = new URLSearchParams({
             code,
             client_id: process.env.GOOGLE_CLIENT_ID || "",

@@ -47,6 +47,7 @@ const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const node_http_1 = __importDefault(require("node:http"));
 const socket_io_1 = require("socket.io");
 const socket = __importStar(require("./socket"));
+const express_session_1 = __importDefault(require("express-session"));
 dotenv_1.default.config();
 database.connect();
 const app = (0, express_1.default)();
@@ -71,6 +72,12 @@ app.use((0, cors_1.default)({
 app.use((0, cookie_parser_1.default)());
 app.use(express_1.default.urlencoded({ extended: false }));
 app.use(express_1.default.json());
+app.use((0, express_session_1.default)({
+    secret: process.env.SESSION_SECRET,
+    resave: true,
+    saveUninitialized: false,
+    cookie: { secure: false },
+}));
 (0, index_route_2.default)(app);
 (0, index_route_1.default)(app);
 (0, notification_route_1.default)(app);

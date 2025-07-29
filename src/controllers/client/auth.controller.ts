@@ -44,7 +44,7 @@ const setCookie = (res: Response, accessToken: string, maxAge?: number) => {
 // [POST] /auth/login
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password, isRemember } = req.body;
+    const { email, password, isRemmember } = req.body;
     const user = await Customer.findOne({ email: email, deleted: false });
 
     if (!user) {
@@ -71,8 +71,10 @@ export const login = async (req: Request, res: Response) => {
     setCookie(
       res,
       accessToken,
-      isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined
+      isRemmember ? 1000 * 60 * 60 * 24 * 15 : undefined
     );
+
+    req.session["has_welcome"] = false;
 
     res.json({
       code: 200,
@@ -193,12 +195,22 @@ export const getInfo = async (req: MyRequest, res: Response) => {
       throw Error("Not allowed!");
     }
 
+    if (
+      req.session["has_welcome"] === undefined ||
+      req.session["has_welcome"] === null
+    ) {
+      req.session["has_welcome"] = true;
+    } else {
+      req.session["has_welcome"] = false;
+    }
+
     res.json({
       code: 200,
       message: "Get info OK!",
       data: {
         ...customer,
         user_id: customer._id,
+        has_welcome: req.session["has_welcome"],
       },
     });
   } catch (error) {
@@ -332,6 +344,8 @@ export const googleLogin = async (req: Request, res: Response) => {
 
     const timeCookie = 1000 * 60 * 60 * 24 * 5; //5 days
 
+    req.session["has_welcome"] = false;
+
     if (exist) {
       if (exist.provider === "google" && exist.providerId === providerId) {
         await Customer.updateOne(
@@ -459,8 +473,8 @@ const handleInfoUser = async (code: string) => {
   //link info https://www.googleapis.com/oauth2/v3/userinfo
 
   try {
-    // const uri = 'https://localhost:3000/auth/google';
-    const uri = "https://shop.kakrist.site/auth/google";
+    const uri = "https://localhost:3000/auth/google";
+    // const uri = "https://shop.kakrist.site/auth/google";
 
     const params = new URLSearchParams({
       code,

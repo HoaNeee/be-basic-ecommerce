@@ -9,11 +9,13 @@ import cookieParser from "cookie-parser";
 import http from "node:http";
 import { Server } from "socket.io";
 import * as socket from "./socket";
+import session from "express-session";
 
 dotenv.config();
 database.connect();
 
 const app: Express = express();
+
 const server = http.createServer(app);
 
 const whiteList = [
@@ -41,6 +43,14 @@ app.use(
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: true,
+    saveUninitialized: false,
+    cookie: { secure: false },
+  })
+);
 
 ClientRoute(app);
 AdminRoute(app);
