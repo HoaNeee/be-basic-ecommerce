@@ -11,9 +11,16 @@ export const index = async (req: MyRequest, res: Response) => {
   try {
     const user_id = req.userId;
 
-    const cart = await Cart.findOne({ user_id: user_id }).select(
+    let cart = await Cart.findOne({ user_id: user_id }).select(
       "-deleted -deletedAt"
     );
+
+    if (!cart) {
+      cart = new Cart({
+        user_id: user_id,
+      });
+      await cart.save();
+    }
 
     const cartItems = await CartDetail.find({ cart_id: cart.id }).lean();
 

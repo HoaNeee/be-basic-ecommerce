@@ -10,10 +10,25 @@ const schema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: true,
+      required: false, // Optional for socials login
     },
     avatar: String,
     phone: String,
+    provider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local",
+    },
+    providerId: String,
+    social: {
+      type: {
+        google: Boolean,
+      },
+      default: {
+        google: false,
+      },
+    },
+
     // role: {
     //   type: String,
     //   default: "customer",

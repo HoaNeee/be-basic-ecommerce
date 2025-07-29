@@ -6,6 +6,26 @@ import { MyRequest } from "../../middlewares/client/auth.middleware";
 import Cart from "../../models/cart.model";
 import Notification from "../../models/notification.model";
 
+const setCookie = (res: Response, accessToken: string, maxAge?: number) => {
+  // res.cookie("jwt_token", accessToken, {
+  //   secure: false,
+  //   httpOnly: true,
+  //   sameSite: "lax",
+  //   path: "/",
+  //   maxAge: maxAge || undefined,
+  // });
+
+  //production
+  res.cookie("jwt_token", accessToken, {
+    secure: true,
+    httpOnly: true,
+    sameSite: "none",
+    path: "/",
+    maxAge: maxAge || undefined,
+    domain: ".kakrist.site", // -> production
+  });
+};
+
 // [POST] /auth/login
 export const login = async (req: Request, res: Response) => {
   try {
@@ -33,23 +53,11 @@ export const login = async (req: Request, res: Response) => {
       userId: user.id,
     });
 
-    // res.cookie("jwt_token", accessToken, {
-    //   secure: false,
-    //   httpOnly: true,
-    //   sameSite: "lax",
-    //   path: "/",
-    //   maxAge: isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined,
-    // });
-
-    //production
-    res.cookie("jwt_token", accessToken, {
-      secure: true,
-      httpOnly: true,
-      sameSite: "none",
-      path: "/",
-      maxAge: isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined,
-      domain: ".kakrist.site", // -> production
-    });
+    setCookie(
+      res,
+      accessToken,
+      isRemember ? 1000 * 60 * 60 * 24 * 15 : undefined
+    );
 
     res.json({
       code: 200,
@@ -78,8 +86,10 @@ export const register = async (req: Request, res: Response) => {
   try {
     const email = req.body.email;
 
-    const exits = await Customer.findOne({ email: email, deleted: false });
-    if (exits) {
+    const exists = await Customer.findOne({ email: email, deleted: false });
+
+    //check email exists or login with social later
+    if (exists) {
       throw Error("Email already existing!!");
     }
 
@@ -113,9 +123,7 @@ export const updateProfile = async (req: MyRequest, res: Response) => {
 
     const body = req.body;
 
-    const customer = await Customer.findByIdAndUpdate(user_id, body);
-
-    // await Customer.updateOne({ _id: user_id }, body);
+    const customer = await Customer.findOne({ _id: user_id, deleted: false });
 
     const notify = new Notification({
       user_id: user_id,
@@ -125,6 +133,18 @@ export const updateProfile = async (req: MyRequest, res: Response) => {
       image: body.avatar || customer.avatar,
       receiver: "customer",
     });
+
+    if (customer.provider === "google") {
+      customer.phone = body.phone || customer.phone;
+      await customer.save();
+      res.json({
+        code: 200,
+        message: "Update profile success!",
+      });
+      return;
+    }
+
+    await Customer.updateOne({ _id: user_id }, body);
 
     await notify.save();
 
@@ -139,6 +159,7 @@ export const updateProfile = async (req: MyRequest, res: Response) => {
     });
   }
 };
+
 // [GET] /auth/profile
 export const getInfo = async (req: MyRequest, res: Response) => {
   try {
@@ -180,13 +201,13 @@ export const logout = async (req: Request, res: Response) => {
     //   path: "/",
     // });
 
-    // //production
+    //production
     res.clearCookie("jwt_token", {
       secure: true,
       httpOnly: true,
       sameSite: "none",
       path: "/",
-      domain: ".kakrist.site", // -> production
+      domain: ".kakrist.site",
     });
 
     res.json({
@@ -267,5 +288,208 @@ export const changeSetting = async (req: MyRequest, res: Response) => {
       code: 400,
       message: error.message,
     });
+  }
+};
+
+// [POST] /auth/google
+export const googleLogin = async (req: Request, res: Response) => {
+  try {
+    const code = req.body.code;
+
+    if (!code) {
+      res.json({
+        code: 400,
+        message: "Missing code",
+      });
+      return;
+    }
+
+    const userInfo = await handleInfoUser(code);
+
+    const email = userInfo.email;
+    const avatar = userInfo.picture || "";
+    const name = userInfo.name.split(" ");
+    const firstName = userInfo.given_name
+      ? userInfo.given_name
+      : name?.length > 0
+      ? name[0]
+      : "";
+    const lastName = userInfo.family_name
+      ? userInfo.family_name
+      : name?.length > 1
+      ? name[1]
+      : "";
+    const providerId = userInfo.sub;
+
+    const exist = await Customer.findOne({
+      email: email,
+      deleted: false,
+    });
+
+    const timeCookie = 1000 * 60 * 60 * 24 * 5; //5 days
+
+    if (exist) {
+      if (exist.provider === "google" && exist.providerId === providerId) {
+        await Customer.updateOne(
+          {
+            _id: exist.id,
+          },
+          {
+            avatar: avatar,
+            firstName: firstName,
+            lastName: lastName,
+          }
+        );
+
+        //set cookie here
+        const accessToken = getAccessToken({
+          userId: exist.id,
+        });
+
+        setCookie(res, accessToken, timeCookie);
+
+        res.json({
+          code: 200,
+          message: "Google login success!",
+          data: {
+            isLogin: true,
+            firstName: firstName,
+            lastName: lastName,
+            user_id: exist.id,
+            avatar: avatar,
+            phone: exist.phone,
+            email: exist.email,
+            setting: exist.setting,
+            provider: exist.provider,
+          },
+        });
+
+        return;
+      } else {
+        //Conflict -> DO THEN
+        // res.json({
+        //   code: 409, // Conflict,
+        //   message:
+        //     "Email already exists with another provider, need linking with an existing account!",
+        // });
+
+        const accessToken = getAccessToken({
+          userId: exist.id,
+        });
+
+        setCookie(res, accessToken, timeCookie);
+
+        res.json({
+          code: 200,
+          message: "Login google success!",
+          data: {
+            isLogin: false,
+            firstName: exist.firstName,
+            lastName: exist.lastName,
+            user_id: exist.id,
+            avatar: exist.avatar,
+            phone: exist.phone,
+            email: exist.email,
+            setting: exist.setting,
+            provider: exist.provider,
+          },
+        });
+        return;
+      }
+    }
+
+    const customer = new Customer({
+      firstName: firstName,
+      lastName: lastName,
+      email: email,
+      avatar: avatar,
+      password: null,
+      provider: "google",
+      providerId: providerId,
+      social: {
+        google: true,
+      },
+    });
+
+    await customer.save();
+
+    //create cart for customer here
+    const newCart = new Cart({
+      user_id: customer.id,
+    });
+
+    await newCart.save();
+
+    //set cookie here
+    const accessToken = getAccessToken({
+      userId: customer.id,
+    });
+
+    setCookie(res, accessToken, timeCookie);
+
+    res.json({
+      code: 200,
+      message: "Google login success!",
+      data: {
+        isLogin: true,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        user_id: customer.id,
+        avatar: customer.avatar,
+        phone: customer.phone,
+        email: customer.email,
+        setting: customer.setting,
+        provider: customer.provider,
+      },
+    });
+  } catch (error) {
+    res.json({
+      code: 500,
+      message: error.message,
+    });
+  }
+};
+
+const handleInfoUser = async (code: string) => {
+  //link token https://oauth2.googleapis.com/token
+  //link info https://www.googleapis.com/oauth2/v3/userinfo
+
+  try {
+    const params = new URLSearchParams({
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID || "",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+      redirect_uri: "http://localhost:3000/auth/google",
+      grant_type: "authorization_code",
+    });
+
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      throw Error("Failed to exchange code for access token");
+    }
+
+    const data = await response.json();
+
+    const info = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${data.access_token}`,
+      },
+    });
+
+    if (!info.ok) {
+      throw Error("Failed to fetch user info");
+    }
+
+    return await info.json();
+  } catch (error) {
+    throw new Error(`Error fetching user info: ${error.message}`);
   }
 };
