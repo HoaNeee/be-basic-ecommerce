@@ -7,7 +7,7 @@ import Product from "../../models/product.model";
 import VariationOption from "../../models/variationOption.model";
 
 // [GET] /cart
-export const index = async (req: MyRequest, res: Response) => {
+export const getCart = async (req: MyRequest, res: Response) => {
   try {
     const user_id = req.userId;
 

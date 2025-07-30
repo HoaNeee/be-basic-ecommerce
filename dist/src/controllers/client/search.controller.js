@@ -13,16 +13,61 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.suggest = exports.search = void 0;
+const product_1 = require("../../../utils/product");
 const product_model_1 = __importDefault(require("../../models/product.model"));
 const blog_model_1 = __importDefault(require("../../models/blog.model"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const user_model_1 = __importDefault(require("../../models/user.model"));
-const product_1 = require("../../../utils/product");
+const product_2 = require("../../../utils/product");
 const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
 const search = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { keyword } = req.query;
         const input = convertInput(keyword);
+        if (!input) {
+            const { products_info } = yield (0, product_1.getTopSellHelper)(req, 12);
+            const suppliers = yield supplier_model_1.default.find({
+                deleted: false,
+                _id: { $in: products_info.map((item) => item.supplier_id) },
+            });
+            for (const element of products_info) {
+                const supplier = suppliers.find((sup) => String(sup._id) === element.supplier_id);
+                if (supplier) {
+                    element["supplierName"] = supplier.name || "Unknown";
+                }
+            }
+            const blogs = yield blog_model_1.default.find({ deleted: false, status: "published" })
+                .sort({ view: -1 })
+                .limit(5)
+                .lean();
+            const response = [];
+            const authorIds = blogs.map((blog) => blog.user_id.toString());
+            const authors = yield user_model_1.default.find({ _id: { $in: authorIds } }).select("fullName avatar email");
+            for (const element of blogs) {
+                const author = authors.find((author) => author._id.toString() === element.user_id.toString());
+                if (author) {
+                    element["author"] = author;
+                }
+            }
+            response.push({
+                type: "products",
+                data: products_info.map((product) => {
+                    return Object.assign({}, product);
+                }),
+            });
+            response.push({
+                type: "blogs",
+                data: blogs.map((blog) => {
+                    return Object.assign(Object.assign({}, blog), { type: "blogs" });
+                }),
+            });
+            res.json({
+                code: 200,
+                message: "Search OK",
+                data: response,
+            });
+            return;
+        }
         const products = yield product_model_1.default.find({
             $text: { $search: input },
             deleted: false,
@@ -55,7 +100,7 @@ const search = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             product["supplierName"] = supplier.name || "Unknown";
             const subs = subProducts.filter((sub) => sub.product_id === String(product._id));
             if (subs.length > 0) {
-                (0, product_1.solvePriceStock)(product, subs);
+                (0, product_2.solvePriceStock)(product, subs);
             }
         }
         const response = [];

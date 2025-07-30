@@ -8,6 +8,7 @@ import { sendMail } from "../../../helpers/sendMail";
 import Customer from "../../models/customer.model";
 import Pagination from "../../../helpers/pagination";
 import { getIo } from "../../../socket";
+import Promotion from "../../models/promotion.model";
 
 interface TemplateHTMLOrder {
   cusName: string;
@@ -92,7 +93,9 @@ const templateHtml = (order: TemplateHTMLOrder) => {
               <span>Chương trình khuyến mãi: </span> 
               ${
                 order?.promotion
-                  ? `Giảm: ${order.promotion.value}`
+                  ? `Giảm: ${order.promotion.value} ${
+                      order.promotion.promotionType === "percent" ? "%" : "VND"
+                    }`
                   : `Không áp dụng`
               }
           </p>
@@ -224,6 +227,20 @@ export const create = async (req: MyRequest, res: Response) => {
     if (promotion) {
       const type = promotion.promotionType;
       const value = promotion.value;
+      const code = promotion.code;
+
+      const promotionCheck = await Promotion.findOne({
+        code,
+      });
+
+      if (!promotionCheck) {
+        throw Error("Promotion code is not valid");
+      }
+      promotionCheck.maxUse -= 1;
+      if (promotionCheck.maxUse < 0) {
+        throw Error("Promotion code has been used up");
+      }
+      await promotionCheck.save();
 
       if (type === "percent") {
         total = total - total * (value / 100);

@@ -34,12 +34,10 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const controller = __importStar(require("../../controllers/client/cart.controller"));
+const controller = __importStar(require("../../controllers/client/transaction.controller"));
 const router = (0, express_1.Router)();
-router.get("/", controller.getCart);
-router.post("/add-product/:cartId", controller.addProduct);
-router.delete("/delete/:cartItemId", controller.remove);
-router.patch("/update-quantity/:cartItemId", controller.updateQuantity);
-router.patch("/change-subProduct/:cartItemId", controller.changeSubProduct);
-const cartRouter = router;
-exports.default = cartRouter;
+router.post("/start", controller.startTransaction);
+router.patch("/change", controller.transactionChange);
+router.get("/detail", controller.transactionDetail);
+const transactionRouter = router;
+exports.default = transactionRouter;

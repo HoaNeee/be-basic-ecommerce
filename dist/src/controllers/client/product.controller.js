@@ -21,7 +21,7 @@ const variation_model_1 = __importDefault(require("../../models/variation.model"
 const variationOption_model_1 = __importDefault(require("../../models/variationOption.model"));
 const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
 const review_model_1 = __importDefault(require("../../models/review.model"));
-const product_controller_1 = require("../admin/product.controller");
+const product_1 = require("../../../utils/product");
 const groupBy_1 = require("../../../helpers/groupBy");
 var ProductType;
 (function (ProductType) {
@@ -66,13 +66,9 @@ const merge = (arr1, arr2, value = "asc") => {
     }
     return res;
 };
-const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        let find = {
-            deleted: false,
-        };
-        const keyword = req.query.q;
-        const variations = yield variation_model_1.default.find({ deleted: false });
+function handleVariationFilters(req, find) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const variations = yield variation_model_1.default.find({ deleted: false }).lean();
         const varsKeyMap = variations.map((item) => item.key);
         const variationKeys = [];
         for (const key in req.query) {
@@ -81,16 +77,16 @@ const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             }
         }
         if (variationKeys.length > 0) {
-            find["productType"] = "variations";
+            find.productType = ProductType.VARIATION;
             const variationOptions = yield variationOption_model_1.default.find({
                 key: { $in: variationKeys },
                 deleted: false,
-            });
-            const idsOptions = variationOptions.map((item) => item.id);
+            }).lean();
+            const idsOptions = variationOptions.map((item) => String(item._id));
             const subOptions = yield subProductOption_model_1.default.find({
                 variation_option_id: { $in: idsOptions },
                 deleted: false,
-            });
+            }).lean();
             const subOptionMap = (0, groupBy_1.groupByArray)(subOptions, "sub_product_id");
             const subIds = [];
             subOptionMap.forEach((val, key) => {
@@ -101,19 +97,183 @@ const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             const subs = yield subProduct_model_1.default.find({
                 deleted: false,
                 _id: { $in: subIds },
-            });
-            const idsProducs = subs.map((item) => item.product_id);
-            find["_id"] = { $in: idsProducs };
+            }).lean();
+            const idsProducts = subs.map((item) => item.product_id);
+            find._id = { $in: idsProducts };
         }
+    });
+}
+function handlePriceFilter(req, res, find, objectPagination, sort_key, sort_value, min_price, max_price) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const objSort = { [sort_key]: sort_value };
+        const products = yield product_model_1.default.find(find)
+            .sort(sort_key !== "price" ? objSort : {})
+            .lean();
+        const { skip, limitItems: limit } = objectPagination;
+        const ids = products.map((item) => String(item._id));
+        const [subProductsInRange, allSubs] = yield Promise.all([
+            subProduct_model_1.default.find({
+                deleted: false,
+                product_id: { $in: ids },
+                price: { $gte: min_price, $lte: max_price },
+            }).lean(),
+            subProduct_model_1.default.find({
+                deleted: false,
+                product_id: { $in: ids },
+            }).lean(),
+        ]);
+        const subSet = new Set(subProductsInRange.map((item) => String(item.product_id)));
+        const subMap = (0, groupBy_1.groupByArray)(allSubs, "product_id");
+        const data = [];
+        for (const product of products) {
+            if (product.productType === ProductType.VARIATION) {
+                if (subSet.has(String(product._id))) {
+                    const productSubs = subMap.get(String(product._id)) || [];
+                    (0, product_1.solvePriceStock)(product, productSubs);
+                    data.push(product);
+                }
+            }
+            else {
+                if (product.price >= min_price && product.price <= max_price) {
+                    data.push(product);
+                }
+            }
+        }
+        if (sort_key === "price") {
+            sortProductsByPrice(data, sort_value);
+        }
+        const response = data.slice(skip, skip + limit);
+        const totalRecord = data.length;
+        const totalPage = Math.ceil(totalRecord / limit);
+        yield productsWithSupplierData(response);
+        res.json({
+            code: 200,
+            message: "OK",
+            data: {
+                products: response,
+                totalRecord,
+                totalPage,
+            },
+        });
+    });
+}
+function handlePriceSorting(req, res, find, objectPagination, objectSort, sort_value) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const [simpleProducts, variationProducts] = yield Promise.all([
+            product_model_1.default.find(Object.assign(Object.assign({}, find), { productType: ProductType.SIMPLE }))
+                .sort(objectSort)
+                .lean(),
+            product_model_1.default.find(Object.assign(Object.assign({}, find), { productType: ProductType.VARIATION })).lean(),
+        ]);
+        if (variationProducts.length > 0) {
+            const idsProducts = variationProducts.map((pro) => pro._id);
+            const subProducts = yield subProduct_model_1.default.find({
+                product_id: { $in: idsProducts },
+                deleted: false,
+            }).lean();
+            const subMap = (0, groupBy_1.groupByArray)(subProducts, "product_id");
+            for (const item of variationProducts) {
+                const subs = subMap.get(String(item._id)) || [];
+                (0, product_1.solvePriceStock)(item, subs);
+            }
+            variationProducts.sort((a, b) => {
+                var _a, _b, _c, _d;
+                const priceA = sort_value === "asc" ? (_a = a["rangePrice"]) === null || _a === void 0 ? void 0 : _a.min : (_b = a["rangePrice"]) === null || _b === void 0 ? void 0 : _b.max;
+                const priceB = sort_value === "asc" ? (_c = b["rangePrice"]) === null || _c === void 0 ? void 0 : _c.min : (_d = b["rangePrice"]) === null || _d === void 0 ? void 0 : _d.max;
+                return sort_value === "asc" ? priceA - priceB : priceB - priceA;
+            });
+        }
+        const arrMerge = merge(simpleProducts, variationProducts, sort_value);
+        const totalRecord = arrMerge.length;
+        const response = arrMerge.slice(objectPagination.skip, objectPagination.skip + objectPagination.limitItems);
+        res.json({
+            code: 200,
+            message: "OK",
+            data: {
+                products: response,
+                totalRecord,
+                totalPage: objectPagination.totalPage,
+            },
+        });
+    });
+}
+function sortProductsByPrice(data, sort_value) {
+    const simpleProducts = data.filter((item) => item.productType === ProductType.SIMPLE);
+    const variationProducts = data.filter((item) => item.productType === ProductType.VARIATION);
+    if (sort_value === "asc") {
+        simpleProducts.sort((a, b) => a.price - b.price);
+        variationProducts.sort((a, b) => a.rangePrice.min - b.rangePrice.min);
+    }
+    else {
+        simpleProducts.sort((a, b) => b.price - a.price);
+        variationProducts.sort((a, b) => b.rangePrice.max - a.rangePrice.max);
+    }
+    data.length = 0;
+    data.push(...merge(simpleProducts, variationProducts, sort_value));
+}
+function productsWithSupplierData(products) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (products.length === 0)
+            return;
+        const supplierIds = [...new Set(products.map((pro) => pro.supplier_id))];
+        const suppliers = yield supplier_model_1.default.find({
+            _id: { $in: supplierIds },
+            deleted: false,
+        }).lean();
+        const supplierMap = new Map();
+        for (const sup of suppliers) {
+            supplierMap.set(String(sup._id), sup);
+        }
+        for (const product of products) {
+            const supplier = supplierMap.get(String(product.supplier_id));
+            product.supplierName = (supplier === null || supplier === void 0 ? void 0 : supplier.name) || "Unknown";
+        }
+    });
+}
+function productsWithSupplierAndSubProducts(products) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (products.length === 0)
+            return;
+        const productIds = products.map((pro) => pro._id);
+        const supplierIds = [...new Set(products.map((pro) => pro.supplier_id))];
+        const [subProducts, suppliers] = yield Promise.all([
+            subProduct_model_1.default.find({
+                product_id: { $in: productIds },
+                deleted: false,
+            }).lean(),
+            supplier_model_1.default.find({
+                _id: { $in: supplierIds },
+                deleted: false,
+            }).lean(),
+        ]);
+        const subMap = (0, groupBy_1.groupByArray)(subProducts, "product_id");
+        const supplierMap = new Map();
+        for (const sup of suppliers) {
+            supplierMap.set(String(sup._id), sup);
+        }
+        for (const product of products) {
+            const supplier = supplierMap.get(String(product.supplier_id));
+            product.supplierName = (supplier === null || supplier === void 0 ? void 0 : supplier.name) || "Unknown";
+            const productSubs = subMap.get(String(product._id)) || [];
+            if (productSubs.length > 0) {
+                (0, product_1.solvePriceStock)(product, productSubs);
+            }
+        }
+    });
+}
+const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        let find = { deleted: false };
+        const keyword = req.query.q;
         if (keyword) {
-            find = Object.assign(Object.assign({}, find), { $or: [
-                    { title: { $regex: keyword, $options: "si" } },
-                    { slug: { $regex: keyword, $options: "si" } },
-                ] });
+            find.$or = [
+                { title: { $regex: keyword, $options: "si" } },
+                { slug: { $regex: keyword, $options: "si" } },
+            ];
         }
         const filter_cats = req.query.filter_cats || "";
         if (filter_cats) {
-            const cats = filter_cats.split(",");
+            const cats = filter_cats.split(",").filter(Boolean);
             if (cats.length > 0) {
                 find.categories = { $in: cats };
             }
@@ -122,182 +282,42 @@ const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         if (supplier_id) {
             find.supplier_id = supplier_id;
         }
+        yield handleVariationFilters(req, find);
         let totalRecord = yield product_model_1.default.countDocuments(find);
-        const initObjectPagination = {
+        const objectPagination = (0, pagination_1.default)({
             page: 1,
-            limitItems: totalRecord,
-        };
-        if (req.query.limit) {
-            initObjectPagination.limitItems = Number(req.query.limit);
-        }
-        const objectPagination = (0, pagination_1.default)(initObjectPagination, req.query, totalRecord);
+            limitItems: req.query.limit ? Number(req.query.limit) : totalRecord,
+        }, req.query, totalRecord);
         const sort = (req.query.sort || "createdAt-desc").toString().split("-");
-        const sort_key = sort[0];
-        const sort_value = sort[1];
-        const objectSort = {};
-        objectSort[`${sort_key}`] = `${sort_value}`;
+        const [sort_key, sort_value] = sort;
+        const objectSort = { [sort_key]: sort_value };
         const min_price = req.query.min_price;
         const max_price = req.query.max_price;
         if (min_price !== undefined && max_price !== undefined) {
-            let data = [];
-            const products = yield product_model_1.default.find(find)
-                .sort(sort_key !== "price" ? objectSort : null)
-                .lean();
-            const skip = objectPagination.skip;
-            const limit = objectPagination.limitItems;
-            const ids = products.map((item) => item._id);
-            const subProducts = yield subProduct_model_1.default.find({
-                $and: [
-                    { deleted: false },
-                    { product_id: { $in: ids } },
-                    { price: { $gte: Number(min_price) } },
-                    { price: { $lte: Number(max_price) } },
-                ],
-            });
-            const subSet = new Set([...subProducts.map((item) => item.product_id)]);
-            const allSubs = yield subProduct_model_1.default.find({
-                $and: [{ deleted: false }, { product_id: { $in: ids } }],
-            }).lean();
-            const subMap = new Map();
-            for (const item of allSubs) {
-                if (!subMap.has(item.product_id)) {
-                    subMap.set(item.product_id, [Object.assign({}, item)]);
-                }
-                else {
-                    const arr = subMap.get(item.product_id);
-                    arr.push(Object.assign({}, item));
-                    subMap.set(item.product_id, [...arr]);
-                }
-            }
-            for (const product of products) {
-                if (product.productType === "variations") {
-                    if (subSet.has(String(product._id))) {
-                        const allSubs = subMap.get(String(product._id));
-                        (0, product_controller_1.solvePriceStock)(product, allSubs);
-                        data.push(product);
-                    }
-                }
-                else {
-                    if (product.price >= Number(min_price) &&
-                        product.price <= Number(max_price)) {
-                        data.push(product);
-                    }
-                }
-            }
-            const response = [];
-            totalRecord = data.length;
-            const totalPage = Math.ceil(totalRecord / limit);
-            const arr1 = data.filter((item) => item.productType === "simple");
-            const arr2 = data.filter((item) => item.productType === "variations");
-            if (sort_key === "price") {
-                let newArr1 = [], newArr2 = [];
-                if (sort_value === "asc") {
-                    newArr1 = [...arr1].sort((a, b) => (a.price < b.price ? -1 : 1));
-                    newArr2 = [...arr2].sort((a, b) => a.rangePrice.min < b.rangePrice.min ? -1 : 1);
-                    data = merge(newArr1, newArr2, sort_value);
-                }
-                else {
-                    newArr1 = [...arr1].sort((a, b) => (a.price < b.price ? 1 : -1));
-                    newArr2 = [...arr2].sort((a, b) => a.rangePrice.max < b.rangePrice.max ? 1 : -1);
-                    data = merge(newArr1, newArr2, sort_value);
-                }
-            }
-            for (let i = skip; i < Math.min(limit + skip, data.length); i++) {
-                response.push(data[i]);
-            }
-            const suppliers = yield supplier_model_1.default.find({
-                _id: { $in: response.map((pro) => pro.supplier_id) },
-                deleted: false,
-            }).lean();
-            const supplierMap = new Map();
-            for (const sup of suppliers) {
-                supplierMap.set(String(sup._id), Object.assign({}, sup));
-            }
-            for (const product of response) {
-                const supplier = supplierMap.get(product.supplier_id);
-                product["supplierName"] = supplier.name;
-            }
-            res.json({
-                code: 200,
-                message: "OK",
-                data: {
-                    products: response,
-                    totalRecord: totalRecord,
-                    totalPage: totalPage,
-                },
-            });
-            return;
+            return yield handlePriceFilter(req, res, find, objectPagination, sort_key, sort_value, Number(min_price), Number(max_price));
         }
         if (sort_key === "price") {
-            const products = yield product_model_1.default.find({
-                $and: [find, { productType: "simple" }],
-            })
-                .sort(objectSort)
-                .lean();
-            const productsHasVariations = yield product_model_1.default.find({
-                $and: [find, { productType: "variations" }],
-            }).lean();
-            const idsProducts = productsHasVariations.map((pro) => pro._id);
-            const subProducts = yield subProduct_model_1.default.find({
-                product_id: { $in: idsProducts },
-                deleted: false,
-            }).lean();
-            for (const item of productsHasVariations) {
-                const subs = subProducts.filter((sub) => sub.product_id === String(item._id));
-                (0, product_controller_1.solvePriceStock)(item, subs);
-            }
-            let newProductHasVariations = [];
-            if (sort_value === "asc") {
-                newProductHasVariations = [...productsHasVariations].sort((a, b) => a[`rangePrice`].min < b[`rangePrice`].min ? -1 : 1);
-            }
-            else {
-                newProductHasVariations = [...productsHasVariations].sort((a, b) => a[`rangePrice`].max < b[`rangePrice`].max ? 1 : -1);
-            }
-            const response = [];
-            const arrMerge = merge(products, newProductHasVariations, sort_value);
-            for (let i = objectPagination.skip; i <
-                Math.min(totalRecord, objectPagination.limitItems + objectPagination.skip); i++) {
-                response.push(arrMerge[i]);
-            }
-            res.json({
-                message: "OK",
-                data: {
-                    products: response,
-                    totalRecord: totalRecord,
-                    totalPage: objectPagination.totalPage,
-                },
-            });
-            return;
+            return yield handlePriceSorting(req, res, find, objectPagination, objectSort, sort_value);
         }
         const products = yield product_model_1.default.find(find)
             .skip(objectPagination.skip)
             .limit(objectPagination.limitItems)
-            .sort(sort_key !== "price" ? objectSort : null)
+            .sort(objectSort)
             .lean();
-        for (const pro of products) {
-            const subProducts = yield subProduct_model_1.default.find({
-                product_id: pro._id,
-                deleted: false,
-            });
-            const supplier = yield supplier_model_1.default.findOne({ _id: pro.supplier_id });
-            pro["supplierName"] = supplier.name;
-            if (subProducts.length > 0) {
-                (0, product_controller_1.solvePriceStock)(pro, subProducts);
-            }
-        }
+        yield productsWithSupplierAndSubProducts(products);
         res.json({
             code: 200,
             message: "OK",
             data: {
-                products: products,
-                totalRecord: totalRecord,
+                products,
+                totalRecord,
                 totalPage: objectPagination.totalPage,
             },
         });
     }
     catch (error) {
-        console.log(error);
-        res.json({
+        console.error("Error in products controller:", error);
+        res.status(400).json({
             code: 400,
             message: error.message || error,
         });
@@ -337,7 +357,7 @@ const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 deleted: false,
             }).lean();
             if (subProducts.length > 0) {
-                (0, product_controller_1.solvePriceStock)(product, subProducts);
+                (0, product_1.solvePriceStock)(product, subProducts);
             }
             const subIds = subProducts.map((item) => String(item._id));
             const subOptions = yield subProductOption_model_1.default.find({
@@ -516,7 +536,7 @@ const filterProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* 
                 if (product.productType === "variations") {
                     if (subSet.has(String(product._id))) {
                         const allSubs = subMap.get(String(product._id));
-                        (0, product_controller_1.solvePriceStock)(product, allSubs);
+                        (0, product_1.solvePriceStock)(product, allSubs);
                         data.push(product);
                     }
                 }
@@ -552,7 +572,7 @@ const filterProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* 
                         $and: [{ deleted: false, product_id: product._id }],
                     });
                     if (subProducts.length > 0) {
-                        (0, product_controller_1.solvePriceStock)(product, subProducts);
+                        (0, product_1.solvePriceStock)(product, subProducts);
                     }
                 }
                 data.push(product);
@@ -578,7 +598,7 @@ const filterProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 exports.filterProduct = filterProduct;
 const getBestSeller = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { products_info } = yield (0, product_controller_1.getTopSellHelper)(req);
+        const { products_info } = yield (0, product_1.getTopSellHelper)(req);
         for (const product of products_info) {
             const supplier = yield supplier_model_1.default.findOne({ _id: product.supplier_id });
             product["supplierName"] = supplier.name;
@@ -615,7 +635,7 @@ const getRelatedProduct = (req, res) => __awaiter(void 0, void 0, void 0, functi
                     product_id: product._id,
                 });
                 if (subProducts.length > 0) {
-                    (0, product_controller_1.solvePriceStock)(product, subProducts);
+                    (0, product_1.solvePriceStock)(product, subProducts);
                 }
             }
             const supplier = yield supplier_model_1.default.findOne({ _id: product.supplier_id });

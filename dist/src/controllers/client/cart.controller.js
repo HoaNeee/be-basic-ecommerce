@@ -12,13 +12,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.remove = exports.changeSubProduct = exports.updateQuantity = exports.addProduct = exports.index = void 0;
+exports.remove = exports.changeSubProduct = exports.updateQuantity = exports.addProduct = exports.getCart = void 0;
 const cart_model_1 = __importDefault(require("../../models/cart.model"));
 const cartDetail_model_1 = __importDefault(require("../../models/cartDetail.model"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const product_model_1 = __importDefault(require("../../models/product.model"));
 const variationOption_model_1 = __importDefault(require("../../models/variationOption.model"));
-const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getCart = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user_id = req.userId;
         let cart = yield cart_model_1.default.findOne({ user_id: user_id }).select("-deleted -deletedAt");
@@ -99,7 +99,7 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
 });
-exports.index = index;
+exports.getCart = getCart;
 const addProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const cart_id = req.params.cartId;

@@ -21,6 +21,7 @@ const sendMail_1 = require("../../../helpers/sendMail");
 const customer_model_1 = __importDefault(require("../../models/customer.model"));
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const socket_1 = require("../../../socket");
+const promotion_model_1 = __importDefault(require("../../models/promotion.model"));
 const templateHtml = (order) => {
     const subTotal = order.products.reduce((val, item) => val + item.quantity * item.price, 0);
     return `
@@ -82,7 +83,7 @@ const templateHtml = (order) => {
           <p>
               <span>Chương trình khuyến mãi: </span> 
               ${(order === null || order === void 0 ? void 0 : order.promotion)
-        ? `Giảm: ${order.promotion.value}`
+        ? `Giảm: ${order.promotion.value} ${order.promotion.promotionType === "percent" ? "%" : "VND"}`
         : `Không áp dụng`}
           </p>
           <p>
@@ -194,6 +195,18 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         if (promotion) {
             const type = promotion.promotionType;
             const value = promotion.value;
+            const code = promotion.code;
+            const promotionCheck = yield promotion_model_1.default.findOne({
+                code,
+            });
+            if (!promotionCheck) {
+                throw Error("Promotion code is not valid");
+            }
+            promotionCheck.maxUse -= 1;
+            if (promotionCheck.maxUse < 0) {
+                throw Error("Promotion code has been used up");
+            }
+            yield promotionCheck.save();
             if (type === "percent") {
                 total = total - total * (value / 100);
             }

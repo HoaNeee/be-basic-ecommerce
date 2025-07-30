@@ -1,5 +1,5 @@
+import { getTopSellHelper } from "../../../utils/product";
 import { Request, Response } from "express";
-import Pagination from "../../../helpers/pagination";
 import Product from "../../models/product.model";
 import Blog from "../../models/blog.model";
 import SubProduct from "../../models/subProduct.model";
@@ -13,6 +13,68 @@ export const search = async (req: Request, res: Response) => {
     const { keyword } = req.query;
 
     const input = convertInput(keyword as string);
+
+    if (!input) {
+      const { products_info } = await getTopSellHelper(req, 12);
+
+      const suppliers = await Supplier.find({
+        deleted: false,
+        _id: { $in: products_info.map((item) => item.supplier_id) },
+      });
+
+      for (const element of products_info) {
+        const supplier = suppliers.find(
+          (sup) => String(sup._id) === element.supplier_id
+        );
+        if (supplier) {
+          element["supplierName"] = supplier.name || "Unknown";
+        }
+      }
+
+      const blogs = await Blog.find({ deleted: false, status: "published" })
+        .sort({ view: -1 })
+        .limit(5)
+        .lean();
+      const response = [];
+
+      const authorIds = blogs.map((blog) => blog.user_id.toString());
+      const authors = await User.find({ _id: { $in: authorIds } }).select(
+        "fullName avatar email"
+      );
+
+      for (const element of blogs) {
+        const author = authors.find(
+          (author) => author._id.toString() === element.user_id.toString()
+        );
+        if (author) {
+          element["author"] = author;
+        }
+      }
+      response.push({
+        type: "products",
+        data: products_info.map((product) => {
+          return {
+            ...product,
+          };
+        }),
+      });
+      response.push({
+        type: "blogs",
+        data: blogs.map((blog) => {
+          return {
+            ...blog,
+            type: "blogs",
+          };
+        }),
+      });
+
+      res.json({
+        code: 200,
+        message: "Search OK",
+        data: response,
+      });
+      return;
+    }
 
     const products = await Product.find({
       $text: { $search: input },

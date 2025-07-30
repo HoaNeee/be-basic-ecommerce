@@ -51,6 +51,7 @@ const order_route_1 = __importDefault(require("./order.route"));
 const favorite_route_1 = __importDefault(require("./favorite.route"));
 const blog_route_1 = __importDefault(require("./blog.route"));
 const search_route_1 = __importDefault(require("./search.route"));
+const transaction_route_1 = __importDefault(require("./transaction.route"));
 const ClientRoute = (app) => {
     app.use("/auth", auth_route_1.default);
     app.use("/categories", category_route_1.default);
@@ -65,6 +66,7 @@ const ClientRoute = (app) => {
     app.use("/payments", authMiddleware.isAccess, pament_route_1.default);
     app.use("/orders", authMiddleware.isAccess, order_route_1.default);
     app.use("/favorites", authMiddleware.isAccess, favorite_route_1.default);
+    app.use("/transaction", authMiddleware.isAccess, transaction_route_1.default);
     app.use("/upload", authMiddleware.isAccess, upload_route_1.default);
 };
 exports.default = ClientRoute;

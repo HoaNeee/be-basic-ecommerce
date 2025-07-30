@@ -14,6 +14,7 @@ import orderRouter from "./order.route";
 import favoriteRouter from "./favorite.route";
 import blogRouter from "./blog.route";
 import searchRouter from "./search.route";
+import transactionRouter from "./transaction.route";
 
 const ClientRoute = (app: Express) => {
   app.use("/auth", authRouter);
@@ -30,6 +31,7 @@ const ClientRoute = (app: Express) => {
   app.use("/payments", authMiddleware.isAccess, paymentRouter);
   app.use("/orders", authMiddleware.isAccess, orderRouter);
   app.use("/favorites", authMiddleware.isAccess, favoriteRouter);
+  app.use("/transaction", authMiddleware.isAccess, transactionRouter);
   app.use("/upload", authMiddleware.isAccess, uploadRouter);
 };
 

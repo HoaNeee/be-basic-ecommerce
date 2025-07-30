@@ -7,7 +7,7 @@ import Variation from "../../models/variation.model";
 import VariationOption from "../../models/variationOption.model";
 import Supplier from "../../models/supplier.model";
 import Review from "../../models/review.model";
-import { getTopSellHelper, solvePriceStock } from "../admin/product.controller";
+import { getTopSellHelper, solvePriceStock } from "../../../utils/product";
 import { groupByArray } from "../../../helpers/groupBy";
 
 enum ProductType {
@@ -55,315 +55,344 @@ const merge = (arr1: any[], arr2: any[], value = "asc") => {
   return res;
 };
 
+async function handleVariationFilters(req: Request, find: any) {
+  const variations = await Variation.find({ deleted: false }).lean();
+  const varsKeyMap = variations.map((item) => item.key);
+  const variationKeys = [];
+
+  for (const key in req.query) {
+    if (varsKeyMap.includes(key) && req.query[key]) {
+      variationKeys.push(req.query[key]);
+    }
+  }
+
+  if (variationKeys.length > 0) {
+    find.productType = ProductType.VARIATION;
+
+    const variationOptions = await VariationOption.find({
+      key: { $in: variationKeys },
+      deleted: false,
+    }).lean();
+
+    const idsOptions = variationOptions.map((item) => String(item._id));
+    const subOptions = await SubProductOption.find({
+      variation_option_id: { $in: idsOptions },
+      deleted: false,
+    }).lean();
+
+    const subOptionMap = groupByArray(subOptions, "sub_product_id");
+    const subIds = [];
+
+    subOptionMap.forEach((val, key) => {
+      if (val.length >= idsOptions.length) {
+        subIds.push(key);
+      }
+    });
+
+    const subs = await SubProduct.find({
+      deleted: false,
+      _id: { $in: subIds },
+    }).lean();
+
+    const idsProducts = subs.map((item) => item.product_id);
+    find._id = { $in: idsProducts };
+  }
+}
+
+async function handlePriceFilter(
+  req: Request,
+  res: Response,
+  find: any,
+  objectPagination: any,
+  sort_key: string,
+  sort_value: string,
+  min_price: number,
+  max_price: number
+) {
+  const objSort: any = { [sort_key]: sort_value };
+
+  const products = await Product.find(find)
+    .sort(sort_key !== "price" ? objSort : {})
+    .lean();
+
+  const { skip, limitItems: limit } = objectPagination;
+  const ids = products.map((item) => String(item._id));
+
+  const [subProductsInRange, allSubs] = await Promise.all([
+    SubProduct.find({
+      deleted: false,
+      product_id: { $in: ids },
+      price: { $gte: min_price, $lte: max_price },
+    }).lean(),
+    SubProduct.find({
+      deleted: false,
+      product_id: { $in: ids },
+    }).lean(),
+  ]);
+
+  const subSet = new Set(
+    subProductsInRange.map((item) => String(item.product_id))
+  );
+  const subMap = groupByArray(allSubs, "product_id");
+
+  const data = [];
+  for (const product of products) {
+    if (product.productType === ProductType.VARIATION) {
+      if (subSet.has(String(product._id))) {
+        const productSubs = subMap.get(String(product._id)) || [];
+        solvePriceStock(product, productSubs);
+        data.push(product);
+      }
+    } else {
+      if (product.price >= min_price && product.price <= max_price) {
+        data.push(product);
+      }
+    }
+  }
+
+  if (sort_key === "price") {
+    sortProductsByPrice(data, sort_value);
+  }
+
+  const response = data.slice(skip, skip + limit);
+  const totalRecord = data.length;
+  const totalPage = Math.ceil(totalRecord / limit);
+
+  await productsWithSupplierData(response);
+
+  res.json({
+    code: 200,
+    message: "OK",
+    data: {
+      products: response,
+      totalRecord,
+      totalPage,
+    },
+  });
+}
+
+async function handlePriceSorting(
+  req: Request,
+  res: Response,
+  find: any,
+  objectPagination: any,
+  objectSort: any,
+  sort_value: string
+) {
+  const [simpleProducts, variationProducts] = await Promise.all([
+    Product.find({ ...find, productType: ProductType.SIMPLE })
+      .sort(objectSort)
+      .lean(),
+    Product.find({ ...find, productType: ProductType.VARIATION }).lean(),
+  ]);
+
+  if (variationProducts.length > 0) {
+    const idsProducts = variationProducts.map((pro) => pro._id);
+    const subProducts = await SubProduct.find({
+      product_id: { $in: idsProducts },
+      deleted: false,
+    }).lean();
+
+    const subMap = groupByArray(subProducts, "product_id");
+
+    for (const item of variationProducts) {
+      const subs = subMap.get(String(item._id)) || [];
+      solvePriceStock(item, subs);
+    }
+
+    variationProducts.sort((a, b) => {
+      const priceA =
+        sort_value === "asc" ? a["rangePrice"]?.min : a["rangePrice"]?.max;
+      const priceB =
+        sort_value === "asc" ? b["rangePrice"]?.min : b["rangePrice"]?.max;
+      return sort_value === "asc" ? priceA - priceB : priceB - priceA;
+    });
+  }
+
+  // Merge and paginate
+  const arrMerge = merge(simpleProducts, variationProducts, sort_value);
+  const totalRecord = arrMerge.length;
+  const response = arrMerge.slice(
+    objectPagination.skip,
+    objectPagination.skip + objectPagination.limitItems
+  );
+
+  res.json({
+    code: 200,
+    message: "OK",
+    data: {
+      products: response,
+      totalRecord,
+      totalPage: objectPagination.totalPage,
+    },
+  });
+}
+
+function sortProductsByPrice(data: any[], sort_value: string) {
+  const simpleProducts = data.filter(
+    (item) => item.productType === ProductType.SIMPLE
+  );
+  const variationProducts = data.filter(
+    (item) => item.productType === ProductType.VARIATION
+  );
+
+  if (sort_value === "asc") {
+    simpleProducts.sort((a, b) => a.price - b.price);
+    variationProducts.sort((a, b) => a.rangePrice.min - b.rangePrice.min);
+  } else {
+    simpleProducts.sort((a, b) => b.price - a.price);
+    variationProducts.sort((a, b) => b.rangePrice.max - a.rangePrice.max);
+  }
+
+  data.length = 0;
+  data.push(...merge(simpleProducts, variationProducts, sort_value));
+}
+
+async function productsWithSupplierData(products: any[]) {
+  if (products.length === 0) return;
+
+  const supplierIds = [...new Set(products.map((pro) => pro.supplier_id))];
+  const suppliers = await Supplier.find({
+    _id: { $in: supplierIds },
+    deleted: false,
+  }).lean();
+
+  const supplierMap = new Map();
+  for (const sup of suppliers) {
+    supplierMap.set(String(sup._id), sup);
+  }
+
+  for (const product of products) {
+    const supplier = supplierMap.get(String(product.supplier_id));
+    product.supplierName = supplier?.name || "Unknown";
+  }
+}
+
+async function productsWithSupplierAndSubProducts(products: any[]) {
+  if (products.length === 0) return;
+
+  const productIds = products.map((pro) => pro._id);
+  const supplierIds = [...new Set(products.map((pro) => pro.supplier_id))];
+
+  const [subProducts, suppliers] = await Promise.all([
+    SubProduct.find({
+      product_id: { $in: productIds },
+      deleted: false,
+    }).lean(),
+    Supplier.find({
+      _id: { $in: supplierIds },
+      deleted: false,
+    }).lean(),
+  ]);
+
+  const subMap = groupByArray(subProducts, "product_id");
+  const supplierMap = new Map();
+
+  for (const sup of suppliers) {
+    supplierMap.set(String(sup._id), sup);
+  }
+
+  for (const product of products) {
+    const supplier = supplierMap.get(String(product.supplier_id));
+    product.supplierName = supplier?.name || "Unknown";
+
+    const productSubs = subMap.get(String(product._id)) || [];
+    if (productSubs.length > 0) {
+      solvePriceStock(product, productSubs);
+    }
+  }
+}
+
 // [GET] /products
 export const products = async (req: Request, res: Response) => {
   try {
-    let find: any = {
-      deleted: false,
-    };
+    let find: any = { deleted: false };
 
     const keyword = req.query.q;
-
-    const variations = await Variation.find({ deleted: false });
-
-    const varsKeyMap = variations.map((item) => item.key);
-
-    const variationKeys = [];
-
-    for (const key in req.query) {
-      if (varsKeyMap.includes(key) && req.query[key]) {
-        variationKeys.push(req.query[key]);
-      }
-    }
-
-    if (variationKeys.length > 0) {
-      find["productType"] = "variations";
-      const variationOptions = await VariationOption.find({
-        key: { $in: variationKeys },
-        deleted: false,
-      });
-      const idsOptions = variationOptions.map((item) => item.id);
-      const subOptions = await SubProductOption.find({
-        variation_option_id: { $in: idsOptions },
-        deleted: false,
-      });
-
-      const subOptionMap = groupByArray(subOptions, "sub_product_id");
-
-      const subIds = [];
-      subOptionMap.forEach((val, key) => {
-        if (val.length >= idsOptions.length) {
-          subIds.push(key);
-        }
-      });
-
-      const subs = await SubProduct.find({
-        deleted: false,
-        _id: { $in: subIds },
-      });
-      const idsProducs = subs.map((item) => item.product_id);
-      find["_id"] = { $in: idsProducs };
-    }
-
     if (keyword) {
-      find = {
-        ...find,
-        $or: [
-          { title: { $regex: keyword, $options: "si" } },
-          { slug: { $regex: keyword, $options: "si" } },
-        ],
-      };
+      find.$or = [
+        { title: { $regex: keyword, $options: "si" } },
+        { slug: { $regex: keyword, $options: "si" } },
+      ];
     }
 
     const filter_cats = (req.query.filter_cats as string) || "";
     if (filter_cats) {
-      const cats = filter_cats.split(",");
-
+      const cats = filter_cats.split(",").filter(Boolean);
       if (cats.length > 0) {
         find.categories = { $in: cats };
       }
     }
 
     const supplier_id = req.query.supplier_id;
-
     if (supplier_id) {
       find.supplier_id = supplier_id;
     }
 
+    await handleVariationFilters(req, find);
+
     let totalRecord = await Product.countDocuments(find);
-
-    const initObjectPagination = {
-      page: 1,
-      limitItems: totalRecord,
-    };
-
-    if (req.query.limit) {
-      initObjectPagination.limitItems = Number(req.query.limit);
-    }
-
     const objectPagination = Pagination(
-      initObjectPagination,
+      {
+        page: 1,
+        limitItems: req.query.limit ? Number(req.query.limit) : totalRecord,
+      },
       req.query,
       totalRecord
     );
 
     const sort = (req.query.sort || "createdAt-desc").toString().split("-");
-    const sort_key = sort[0];
-    const sort_value = sort[1];
-    const objectSort = {};
+    const [sort_key, sort_value] = sort;
+    const objectSort: any = { [sort_key]: sort_value };
 
-    objectSort[`${sort_key}`] = `${sort_value}`;
-
-    //price
     const min_price = req.query.min_price;
     const max_price = req.query.max_price;
 
     if (min_price !== undefined && max_price !== undefined) {
-      let data = [];
-
-      const products = await Product.find(find)
-        .sort(sort_key !== "price" ? objectSort : null)
-        .lean();
-
-      const skip = objectPagination.skip;
-      const limit = objectPagination.limitItems;
-
-      const ids = products.map((item) => item._id);
-
-      const subProducts = await SubProduct.find({
-        $and: [
-          { deleted: false },
-          { product_id: { $in: ids } },
-          { price: { $gte: Number(min_price) } },
-          { price: { $lte: Number(max_price) } },
-        ],
-      });
-
-      const subSet = new Set([...subProducts.map((item) => item.product_id)]);
-
-      const allSubs = await SubProduct.find({
-        $and: [{ deleted: false }, { product_id: { $in: ids } }],
-      }).lean();
-
-      const subMap = new Map();
-      for (const item of allSubs) {
-        if (!subMap.has(item.product_id)) {
-          subMap.set(item.product_id, [{ ...item }]);
-        } else {
-          const arr = subMap.get(item.product_id);
-          arr.push({ ...item });
-          subMap.set(item.product_id, [...arr]);
-        }
-      }
-
-      for (const product of products) {
-        if (product.productType === "variations") {
-          if (subSet.has(String(product._id))) {
-            const allSubs = subMap.get(String(product._id));
-            solvePriceStock(product, allSubs);
-            data.push(product);
-          }
-        } else {
-          if (
-            product.price >= Number(min_price) &&
-            product.price <= Number(max_price)
-          ) {
-            data.push(product);
-          }
-        }
-      }
-
-      const response = [];
-      totalRecord = data.length;
-      const totalPage = Math.ceil(totalRecord / limit);
-
-      const arr1 = data.filter((item) => item.productType === "simple");
-      const arr2 = data.filter((item) => item.productType === "variations");
-
-      if (sort_key === "price") {
-        let newArr1 = [],
-          newArr2 = [];
-        if (sort_value === "asc") {
-          newArr1 = [...arr1].sort((a, b) => (a.price < b.price ? -1 : 1));
-          newArr2 = [...arr2].sort((a, b) =>
-            a.rangePrice.min < b.rangePrice.min ? -1 : 1
-          );
-          data = merge(newArr1, newArr2, sort_value);
-        } else {
-          newArr1 = [...arr1].sort((a, b) => (a.price < b.price ? 1 : -1));
-          newArr2 = [...arr2].sort((a, b) =>
-            a.rangePrice.max < b.rangePrice.max ? 1 : -1
-          );
-          data = merge(newArr1, newArr2, sort_value);
-        }
-      }
-
-      for (let i = skip; i < Math.min(limit + skip, data.length); i++) {
-        response.push(data[i]);
-      }
-
-      const suppliers = await Supplier.find({
-        _id: { $in: response.map((pro) => pro.supplier_id) },
-        deleted: false,
-      }).lean();
-
-      const supplierMap = new Map();
-      for (const sup of suppliers) {
-        supplierMap.set(String(sup._id), { ...sup });
-      }
-
-      for (const product of response) {
-        const supplier = supplierMap.get(product.supplier_id);
-        product["supplierName"] = supplier.name;
-      }
-
-      res.json({
-        code: 200,
-        message: "OK",
-        data: {
-          products: response,
-          totalRecord: totalRecord,
-          totalPage: totalPage,
-        },
-      });
-      return;
+      return await handlePriceFilter(
+        req,
+        res,
+        find,
+        objectPagination,
+        sort_key,
+        sort_value,
+        Number(min_price),
+        Number(max_price)
+      );
     }
 
+    // Handle price sorting
     if (sort_key === "price") {
-      const products = await Product.find({
-        $and: [find, { productType: "simple" }],
-      })
-        .sort(objectSort)
-        .lean();
-
-      const productsHasVariations = await Product.find({
-        $and: [find, { productType: "variations" }],
-      }).lean();
-
-      const idsProducts = productsHasVariations.map((pro) => pro._id);
-      const subProducts = await SubProduct.find({
-        product_id: { $in: idsProducts },
-        deleted: false,
-      }).lean();
-
-      for (const item of productsHasVariations) {
-        const subs = subProducts.filter(
-          (sub) => sub.product_id === String(item._id)
-        );
-        solvePriceStock(item, subs);
-      }
-
-      let newProductHasVariations = [];
-
-      if (sort_value === "asc") {
-        newProductHasVariations = [...productsHasVariations].sort((a, b) =>
-          a[`rangePrice`].min < b[`rangePrice`].min ? -1 : 1
-        );
-      } else {
-        newProductHasVariations = [...productsHasVariations].sort((a, b) =>
-          a[`rangePrice`].max < b[`rangePrice`].max ? 1 : -1
-        );
-      }
-
-      const response = [];
-
-      const arrMerge = merge(products, newProductHasVariations, sort_value);
-
-      for (
-        let i = objectPagination.skip;
-        i <
-        Math.min(
-          totalRecord,
-          objectPagination.limitItems + objectPagination.skip
-        );
-        i++
-      ) {
-        response.push(arrMerge[i]);
-      }
-
-      res.json({
-        message: "OK",
-        data: {
-          products: response,
-          totalRecord: totalRecord,
-          totalPage: objectPagination.totalPage,
-        },
-      });
-      return;
+      return await handlePriceSorting(
+        req,
+        res,
+        find,
+        objectPagination,
+        objectSort,
+        sort_value
+      );
     }
 
     const products = await Product.find(find)
       .skip(objectPagination.skip)
       .limit(objectPagination.limitItems)
-      .sort(sort_key !== "price" ? objectSort : null)
+      .sort(objectSort)
       .lean();
 
-    for (const pro of products) {
-      const subProducts = await SubProduct.find({
-        product_id: pro._id,
-        deleted: false,
-      });
-
-      const supplier = await Supplier.findOne({ _id: pro.supplier_id });
-      pro["supplierName"] = supplier.name;
-
-      if (subProducts.length > 0) {
-        solvePriceStock(pro, subProducts);
-      }
-    }
+    await productsWithSupplierAndSubProducts(products);
 
     res.json({
       code: 200,
       message: "OK",
       data: {
-        products: products,
-        totalRecord: totalRecord,
+        products,
+        totalRecord,
         totalPage: objectPagination.totalPage,
       },
     });
   } catch (error) {
-    console.log(error);
-    res.json({
+    console.error("Error in products controller:", error);
+    res.status(400).json({
       code: 400,
       message: error.message || error,
     });
