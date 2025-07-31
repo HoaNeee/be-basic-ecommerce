@@ -49,6 +49,7 @@ const socket_io_1 = require("socket.io");
 const socket = __importStar(require("./socket"));
 const express_session_1 = __importDefault(require("express-session"));
 const express_rate_limit_1 = require("express-rate-limit");
+const connect_mongo_1 = __importDefault(require("connect-mongo"));
 const limiter = (0, express_rate_limit_1.rateLimit)({
     windowMs: 15 * 60 * 1000,
     max: 1000,
@@ -95,6 +96,11 @@ app.use((0, express_session_1.default)({
         : {
             secure: false,
         },
+    store: connect_mongo_1.default.create({
+        mongoUrl: process.env.MONGO_URL,
+        collectionName: "sessions",
+        ttl: 14 * 24 * 60 * 60,
+    }),
 }));
 app.use(limiter);
 (0, index_route_2.default)(app);

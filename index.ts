@@ -11,6 +11,7 @@ import { Server } from "socket.io";
 import * as socket from "./socket";
 import session from "express-session";
 import { rateLimit } from "express-rate-limit";
+import MongoStore from "connect-mongo";
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -70,6 +71,11 @@ app.use(
         : {
             secure: false,
           },
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGO_URL,
+      collectionName: "sessions",
+      ttl: 14 * 24 * 60 * 60, // = 14 days. Default
+    }),
   })
 );
 app.use(limiter);
