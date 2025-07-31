@@ -10,6 +10,15 @@ import http from "node:http";
 import { Server } from "socket.io";
 import * as socket from "./socket";
 import session from "express-session";
+import { rateLimit } from "express-rate-limit";
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000,
+  message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 dotenv.config();
 database.connect();
@@ -63,6 +72,7 @@ app.use(
           },
   })
 );
+app.use(limiter);
 
 ClientRoute(app);
 AdminRoute(app);

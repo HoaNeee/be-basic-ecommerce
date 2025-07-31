@@ -34,24 +34,9 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const express_rate_limit_1 = require("express-rate-limit");
-const controller = __importStar(require("../../controllers/client/auth.controller"));
-const authMiddleware = __importStar(require("../../middlewares/client/auth.middleware"));
+const controller = __importStar(require("../../controllers/client/chatbot.controller"));
 const router = (0, express_1.Router)();
-const limiter = (0, express_rate_limit_1.rateLimit)({
-    windowMs: 15 * 60 * 1000,
-    max: 10,
-    message: "Too many requests, please try again later.",
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-router.post("/login", limiter, controller.login);
-router.post("/register", limiter, controller.register);
-router.post("/logout", controller.logout);
-router.post("/google", controller.googleLogin);
-router.get("/profile", authMiddleware.isAccess, controller.getInfo);
-router.patch("/profile/change-password", authMiddleware.isAccess, limiter, controller.changePassword);
-router.patch("/profile/edit", authMiddleware.isAccess, controller.updateProfile);
-router.patch("/profile/change-setting", authMiddleware.isAccess, controller.changeSetting);
-const authRouter = router;
-exports.default = authRouter;
+router.get("/history", controller.getHistoryChat);
+router.post("/", controller.chatBot);
+const chatBotRouter = router;
+exports.default = chatBotRouter;

@@ -48,6 +48,14 @@ const node_http_1 = __importDefault(require("node:http"));
 const socket_io_1 = require("socket.io");
 const socket = __importStar(require("./socket"));
 const express_session_1 = __importDefault(require("express-session"));
+const express_rate_limit_1 = require("express-rate-limit");
+const limiter = (0, express_rate_limit_1.rateLimit)({
+    windowMs: 15 * 60 * 1000,
+    max: 1000,
+    message: "Too many requests from this IP, please try again later.",
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 dotenv_1.default.config();
 database.connect();
 const app = (0, express_1.default)();
@@ -88,6 +96,7 @@ app.use((0, express_session_1.default)({
             secure: false,
         },
 }));
+app.use(limiter);
 (0, index_route_2.default)(app);
 (0, index_route_1.default)(app);
 (0, notification_route_1.default)(app);
