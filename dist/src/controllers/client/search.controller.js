@@ -20,10 +20,11 @@ const subProduct_model_1 = __importDefault(require("../../models/subProduct.mode
 const user_model_1 = __importDefault(require("../../models/user.model"));
 const product_2 = require("../../../utils/product");
 const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
+const convertInput_1 = require("../../../helpers/convertInput");
 const search = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { keyword } = req.query;
-        const input = convertInput(keyword);
+        const input = (0, convertInput_1.convertInput)(keyword);
         if (!input) {
             const { products_info } = yield (0, product_1.getTopSellHelper)(req, 12);
             const suppliers = yield supplier_model_1.default.find({
@@ -137,17 +138,13 @@ exports.search = search;
 const suggest = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { keyword } = req.query;
-        const convertedKeyword = convertInput(keyword);
-        const options = "sixum";
-        const wordProductsFilters = convertedKeyword.split(" ").map((w) => {
-            return {
-                $or: [
-                    { title: { $regex: w, $options: options } },
-                    { shortDescription: { $regex: w, $options: options } },
-                    { SKU: { $regex: w, $options: options } },
-                    { slug: { $regex: w, $options: options } },
-                ],
-            };
+        const convertedKeyword = (0, convertInput_1.convertInput)(keyword);
+        const options = "si";
+        const wordProductsFilters = (0, convertInput_1.getWordsFilterInput)({
+            input: keyword,
+            options: options,
+            type: "$or",
+            keys: ["title", "content", "SKU", "shortDescription"],
         });
         const suggestsProduct = yield product_model_1.default.find({
             deleted: false,
@@ -156,14 +153,11 @@ const suggest = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             .limit(10)
             .select("title shortDescription SKU")
             .lean();
-        const wordBlogsFilters = convertedKeyword.split(" ").map((w) => {
-            return {
-                $or: [
-                    { title: { $regex: w, $options: options } },
-                    { excerpt: { $regex: w, $options: options } },
-                    { slug: { $regex: w, $options: options } },
-                ],
-            };
+        const wordBlogsFilters = (0, convertInput_1.getWordsFilterInput)({
+            input: keyword,
+            options: options,
+            type: "$or",
+            keys: ["title", "excerpt", "slug"],
         });
         const suggestsBlogs = yield blog_model_1.default.find({
             deleted: false,
@@ -179,7 +173,7 @@ const suggest = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         for (const sugProduct of suggestsProduct) {
             delete sugProduct._id;
             for (const key in sugProduct) {
-                const cv = convertInput(sugProduct[key]);
+                const cv = (0, convertInput_1.convertInput)(sugProduct[key]);
                 if (cv.includes(convertedKeyword) && !productSet.has(cv) && limit > 0) {
                     response.push(sugProduct[key].replace(/-/g, " ").replace(/\s+/g, " "));
                     productSet.add(cv);
@@ -191,7 +185,7 @@ const suggest = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         for (const sugBlog of suggestsBlogs) {
             delete sugBlog._id;
             for (const key in sugBlog) {
-                const cv = convertInput(sugBlog[key]);
+                const cv = (0, convertInput_1.convertInput)(sugBlog[key]);
                 if (cv.includes(convertedKeyword)) {
                     response.push(sugBlog[key].replace(/-/g, " ").replace(/\s+/g, " "));
                     break;
@@ -212,16 +206,3 @@ const suggest = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.suggest = suggest;
-const convertInput = (input) => {
-    function removeVietnameseTones(str) {
-        return (str
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .replace(/đ/g, "d")
-            .replace(/Đ/g, "D")
-            .trim()
-            .replace(/\s+/g, " ")
-            .toLowerCase());
-    }
-    return removeVietnameseTones(input);
-};

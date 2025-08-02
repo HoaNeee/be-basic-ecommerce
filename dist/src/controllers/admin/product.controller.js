@@ -277,6 +277,7 @@ const edit = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const productType = req.body.productType;
         switch (productType) {
             case ProductType.SIMPLE:
+                req.body.price = req.body.price || 0;
                 break;
             case ProductType.VARIATION:
                 req.body.price = null;
@@ -285,7 +286,6 @@ const edit = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 throw Error("Type of product is not correct!");
         }
         req.body.stock = ((_a = req.body) === null || _a === void 0 ? void 0 : _a.stock) || 0;
-        console.log(req.body);
         yield product_model_1.default.updateOne({ _id: product_id }, req.body);
         res.json({
             code: 200,
@@ -319,7 +319,7 @@ const editSubProduct = (req, res) => __awaiter(void 0, void 0, void 0, function*
         for (const item of subProducts) {
             if (item.sub_product_id) {
                 yield subProduct_model_1.default.updateOne({ _id: item.sub_product_id }, {
-                    price: (item === null || item === void 0 ? void 0 : item.price) || null,
+                    price: (item === null || item === void 0 ? void 0 : item.price) || 0,
                     stock: (item === null || item === void 0 ? void 0 : item.stock) || 0,
                     thumbnail: (item === null || item === void 0 ? void 0 : item.thumbnail) || "",
                     discountedPrice: (item === null || item === void 0 ? void 0 : item.discountedPrice) || null,

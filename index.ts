@@ -74,7 +74,7 @@ app.use(
     store: MongoStore.create({
       mongoUrl: process.env.MONGO_URL,
       collectionName: "sessions",
-      ttl: 14 * 24 * 60 * 60, // = 14 days. Default
+      ttl: 2 * 24 * 60 * 60, // = 14 days. Default
     }),
   })
 );

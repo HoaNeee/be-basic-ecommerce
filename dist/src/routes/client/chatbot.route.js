@@ -32,11 +32,29 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controller = __importStar(require("../../controllers/client/chatbot.controller"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const router = (0, express_1.Router)();
+const chatMiddleware = (req, res, next) => {
+    const token = req.cookies.jwt_token;
+    if (!token) {
+        req.userId = "";
+    }
+    const decoded = jsonwebtoken_1.default.decode(token);
+    if (!decoded) {
+        req.userId = "";
+    }
+    else {
+        req.userId = decoded.userId;
+    }
+    next();
+};
 router.get("/history", controller.getHistoryChat);
-router.post("/", controller.chatBot);
+router.post("/", chatMiddleware, controller.chatBot);
 const chatBotRouter = router;
 exports.default = chatBotRouter;

@@ -345,10 +345,9 @@ export const edit = async (req: Request, res: Response) => {
 
     switch (productType) {
       case ProductType.SIMPLE:
-        //do something...
+        req.body.price = req.body.price || 0;
         break;
       case ProductType.VARIATION:
-        //something...
         req.body.price = null;
         break;
       default:
@@ -356,7 +355,6 @@ export const edit = async (req: Request, res: Response) => {
     }
 
     req.body.stock = req.body?.stock || 0;
-    console.log(req.body);
 
     await Product.updateOne({ _id: product_id }, req.body);
 
@@ -407,7 +405,7 @@ export const editSubProduct = async (req: Request, res: Response) => {
         await SubProduct.updateOne(
           { _id: item.sub_product_id },
           {
-            price: item?.price || null,
+            price: item?.price || 0,
             stock: item?.stock || 0,
             thumbnail: item?.thumbnail || "",
             discountedPrice: item?.discountedPrice || null,

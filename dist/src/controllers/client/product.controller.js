@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getVariationOptions = exports.getRelatedProduct = exports.getBestSeller = exports.filterProduct = exports.getPriceProduct = exports.detail = exports.products = void 0;
+exports.getVariationOptions = exports.getRelatedProduct = exports.getBestSeller = exports.filterProduct = exports.getPriceProduct = exports.detail = exports.productsV2 = exports.products = void 0;
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const subProductOption_model_1 = __importDefault(require("../../models/subProductOption.model"));
@@ -23,6 +23,8 @@ const supplier_model_1 = __importDefault(require("../../models/supplier.model"))
 const review_model_1 = __importDefault(require("../../models/review.model"));
 const product_1 = require("../../../utils/product");
 const groupBy_1 = require("../../../helpers/groupBy");
+const convertInput_1 = require("../../../helpers/convertInput");
+const category_model_1 = __importDefault(require("../../models/category.model"));
 var ProductType;
 (function (ProductType) {
     ProductType["SIMPLE"] = "simple";
@@ -324,6 +326,249 @@ const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.products = products;
+const productsV2 = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        let find = {
+            deleted: false,
+        };
+        const keyword = req.query.q;
+        if (keyword) {
+            const wordsFilter = (0, convertInput_1.getWordsFilterInput)({
+                input: keyword,
+                options: "si",
+                type: "$or",
+                keys: ["title", "content", "SKU", "slug"],
+            });
+            find = Object.assign(Object.assign({}, find), { $and: wordsFilter });
+        }
+        const filter_cats = req.query.filter_cats || "";
+        if (filter_cats) {
+            const cats = filter_cats.split(",").filter(Boolean);
+            if (cats.length > 0) {
+                find.categories = { $in: cats };
+            }
+        }
+        const supplier_id = req.query.supplier_id;
+        if (supplier_id) {
+            find.supplier_id = supplier_id;
+        }
+        const sort_query = req.query.sort || "";
+        let sort_key = "createdAt";
+        let sort_value = -1;
+        let sort = {};
+        const sortSplit = sort_query.split("-");
+        if (sort_query && sortSplit && (sortSplit === null || sortSplit === void 0 ? void 0 : sortSplit.length) > 1) {
+            sort_key = sortSplit[0];
+            sort_value = sortSplit[1] === "desc" ? -1 : 1;
+            sort[sort_key] = sort_value;
+        }
+        else {
+            sort[sort_key] = sort_value;
+        }
+        const min_price = Number(req.query.min_price) || 0;
+        const max_price = Number(req.query.max_price) || Infinity;
+        const variations = yield variation_model_1.default.find({ deleted: false }).lean();
+        const varsKeyMap = variations.map((item) => item.key);
+        const variationOptionsKeys = [];
+        for (const key in req.query) {
+            if (varsKeyMap.includes(key) && req.query[key]) {
+                variationOptionsKeys.push(req.query[key]);
+            }
+        }
+        let option_ids = [];
+        if (variationOptionsKeys.length > 0) {
+            find.productType = ProductType.VARIATION;
+            const options = yield variationOption_model_1.default.find({
+                key: { $in: variationOptionsKeys },
+                deleted: false,
+            });
+            option_ids = [...options.map((item) => item.id)];
+        }
+        const pipeline = [
+            {
+                $match: find,
+            },
+            {
+                $addFields: {
+                    product_id_string: { $toString: "$_id" },
+                    supplier_object_id: { $toObjectId: "$supplier_id" },
+                },
+            },
+            {
+                $lookup: {
+                    from: "sub-products",
+                    localField: "product_id_string",
+                    foreignField: "product_id",
+                    as: "subProducts",
+                    pipeline: [
+                        {
+                            $project: {
+                                price: 1,
+                                _id: 1,
+                                sub_product_id_string: { $toString: "$_id" },
+                                deleted: 1,
+                            },
+                        },
+                    ],
+                },
+            },
+            {
+                $lookup: {
+                    from: "suppliers",
+                    localField: "supplier_object_id",
+                    foreignField: "_id",
+                    as: "supplier",
+                },
+            },
+            {
+                $unwind: "$supplier",
+            },
+            {
+                $set: {
+                    rangePrice: {
+                        max: { $max: "$subProducts.price" },
+                        min: { $min: "$subProducts.price" },
+                    },
+                    supplierName: "$supplier.name",
+                    sortPrice: {
+                        $cond: {
+                            if: { $eq: [sort_value, 1] },
+                            then: {
+                                $cond: {
+                                    if: { $eq: ["$productType", ProductType.VARIATION] },
+                                    then: {
+                                        $min: "$subProducts.price",
+                                    },
+                                    else: "$price",
+                                },
+                            },
+                            else: {
+                                $cond: {
+                                    if: { $eq: ["$productType", ProductType.VARIATION] },
+                                    then: {
+                                        $max: "$subProducts.price",
+                                    },
+                                    else: "$price",
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                $match: {
+                    $expr: {
+                        $or: [
+                            {
+                                $and: [
+                                    { $eq: ["$productType", ProductType.VARIATION] },
+                                    { $gte: ["$rangePrice.max", min_price] },
+                                    { $lte: ["$rangePrice.max", max_price] },
+                                ],
+                            },
+                            {
+                                $and: [
+                                    { $eq: ["$productType", "simple"] },
+                                    { $gte: ["$price", min_price] },
+                                    { $lte: ["$price", max_price] },
+                                ],
+                            },
+                        ],
+                    },
+                },
+            },
+            {
+                $lookup: {
+                    from: "sub-product-options",
+                    localField: "subProducts.sub_product_id_string",
+                    foreignField: "sub_product_id",
+                    as: "subOptions",
+                    pipeline: [
+                        {
+                            $match: {
+                                deleted: false,
+                            },
+                        },
+                        {
+                            $project: {
+                                variation_option_id: 1,
+                                sub_product_id: 1,
+                            },
+                        },
+                        {
+                            $group: {
+                                _id: "$sub_product_id",
+                                options: { $push: "$variation_option_id" },
+                            },
+                        },
+                        {
+                            $match: {
+                                options: option_ids,
+                            },
+                        },
+                    ],
+                },
+            },
+            {
+                $set: {
+                    size_of_options: { $size: "$subOptions" },
+                },
+            },
+            {
+                $match: {
+                    size_of_options: { $gte: option_ids.length > 0 ? 1 : 0 },
+                },
+            },
+            {
+                $unset: [
+                    "supplier",
+                    "subProducts",
+                    "supplier_object_id",
+                    "product_id_string",
+                    "supplier_id",
+                    "subOptions",
+                    "size_of_options",
+                ],
+            },
+            {
+                $sort: sort,
+            },
+        ];
+        const total = yield product_model_1.default.aggregate([...pipeline, { $count: "total" }]);
+        const totalRecord = total && total.length > 0 ? (_a = total[0]) === null || _a === void 0 ? void 0 : _a.total : 0;
+        const initPagination = {
+            page: 1,
+            limitItems: 15,
+        };
+        if (req.query.limit) {
+            initPagination.limitItems = Number(req.query.limit);
+        }
+        const pagiation = (0, pagination_1.default)(initPagination, req.query, totalRecord);
+        const products = yield product_model_1.default.aggregate([
+            ...pipeline,
+            { $skip: pagiation.skip },
+            { $limit: pagiation.limitItems },
+        ]);
+        res.json({
+            code: 200,
+            message: "OK",
+            data: {
+                products,
+                totalRecord,
+                totalPage: pagiation.totalPage,
+            },
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.productsV2 = productsV2;
 const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const slug = req.params.slug;
@@ -351,6 +596,13 @@ const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             numberPeople,
             average,
         };
+        const categories = yield category_model_1.default.find({
+            _id: { $in: product.categories },
+            deleted: false,
+        })
+            .select("title slug")
+            .lean();
+        product["categories_info"] = categories;
         if (product.productType === ProductType.VARIATION) {
             const subProducts = yield subProduct_model_1.default.find({
                 product_id: product._id,

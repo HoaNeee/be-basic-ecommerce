@@ -6,6 +6,10 @@ import SubProduct from "../../models/subProduct.model";
 import User from "../../models/user.model";
 import { solvePriceStock } from "../../../utils/product";
 import Supplier from "../../models/supplier.model";
+import {
+  convertInput,
+  getWordsFilterInput,
+} from "../../../helpers/convertInput";
 
 // [GET] /search
 export const search = async (req: Request, res: Response) => {
@@ -172,19 +176,15 @@ export const suggest = async (req: Request, res: Response) => {
   try {
     const { keyword } = req.query;
 
-    const convertedKeyword: any = convertInput(keyword as string);
+    const convertedKeyword = convertInput(keyword as string);
 
-    const options = "sixum";
+    const options = "si";
 
-    const wordProductsFilters = convertedKeyword.split(" ").map((w) => {
-      return {
-        $or: [
-          { title: { $regex: w, $options: options } },
-          { shortDescription: { $regex: w, $options: options } },
-          { SKU: { $regex: w, $options: options } },
-          { slug: { $regex: w, $options: options } },
-        ],
-      };
+    const wordProductsFilters = getWordsFilterInput({
+      input: keyword as string,
+      options: options,
+      type: "$or",
+      keys: ["title", "content", "SKU", "shortDescription"],
     });
 
     const suggestsProduct = await Product.find({
@@ -195,14 +195,11 @@ export const suggest = async (req: Request, res: Response) => {
       .select("title shortDescription SKU")
       .lean();
 
-    const wordBlogsFilters = convertedKeyword.split(" ").map((w) => {
-      return {
-        $or: [
-          { title: { $regex: w, $options: options } },
-          { excerpt: { $regex: w, $options: options } },
-          { slug: { $regex: w, $options: options } },
-        ],
-      };
+    const wordBlogsFilters = getWordsFilterInput({
+      input: keyword as string,
+      options: options,
+      type: "$or",
+      keys: ["title", "excerpt", "slug"],
     });
 
     const suggestsBlogs = await Blog.find({
@@ -254,22 +251,4 @@ export const suggest = async (req: Request, res: Response) => {
       message: error.message,
     });
   }
-};
-
-const convertInput = (input: string) => {
-  function removeVietnameseTones(str: string): string {
-    return (
-      str
-        .normalize("NFD") // split characters with diacritics
-        .replace(/[\u0300-\u036f]/g, "") // remove diacritics
-        .replace(/đ/g, "d")
-        .replace(/Đ/g, "D") // replace 'đ' with 'd' and 'Đ' with 'D'
-        // .replace(/[^a-zA-Z0-9\s]/g, "") // remove special characters
-        .trim() // remove leading and trailing whitespace
-        .replace(/\s+/g, " ") // replace multiple spaces with a single space
-        .toLowerCase()
-    ); // convert to lowercase
-  }
-
-  return removeVietnameseTones(input);
 };

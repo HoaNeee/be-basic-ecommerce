@@ -99,7 +99,7 @@ app.use((0, express_session_1.default)({
     store: connect_mongo_1.default.create({
         mongoUrl: process.env.MONGO_URL,
         collectionName: "sessions",
-        ttl: 14 * 24 * 60 * 60,
+        ttl: 2 * 24 * 60 * 60,
     }),
 }));
 app.use(limiter);
