@@ -158,7 +158,7 @@ const getIntent = (input, req) => __awaiter(void 0, void 0, void 0, function* ()
       Chỉ trả về dạng JSON: { "intent": "..." }
     `;
         const response = yield gemAI.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.0-flash",
             contents: classicPrompt,
         });
         const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);

@@ -183,7 +183,7 @@ const getIntent = async (input: string, req: Request) => {
     `;
 
     const response = await gemAI.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: classicPrompt,
     });
 
