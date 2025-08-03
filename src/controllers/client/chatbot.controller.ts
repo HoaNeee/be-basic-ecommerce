@@ -360,19 +360,20 @@ const promptGuideWebsite = async (
       req.userId
     }, nếu trống thì là chưa login, ngược lại là đã login.
     - Hãy nhớ rằng bạn chỉ xuất hiện ở trang chủ ("/"), các trang khác tôi chưa có update để bạn có thể xuất hiện, nên bạn hãy hướng dẫn thân thiện và tự nhiên nhé.
+    - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt.
 
     Yêu cầu:
-    - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt.
     - Phân tích yêu cầu của người dùng và cung cấp hướng dẫn chi tiết về cách sử dụng trang web.
     - Đảm bảo rằng các đường dẫn được đề cập ở trên được sử dụng đúng cách trong hướng dẫn.
     - Nếu người dùng hỏi về các route private, hãy check xem đã login hay chưa, nếu chưa thì hãy trả lời rằng bạn cần đăng nhập để sử dụng các chức năng này.
+    - Đừng cố gắng đề cập đến các route private nếu người dùng chưa đăng nhập, hãy hướng dẫn họ đăng nhập trước.
     - Response của bạn nên bao gồm các thẻ HTML để định dạng văn bản, ví dụ: <p>Hướng dẫn sử dụng trang web...</p>.
     - Hãy mô tả đường dẫn như 1 breedcrumb, ví dụ: "Để truy cập trang chủ, bạn có thể vào <a href='${DOMAIN}'>Trang chủ</a> hoặc để xem sản phẩm, hãy vào <a href='${DOMAIN}/shop'>Cửa hàng</a>."
     - Hỏi xem người dùng có muốn tự động chuyển hướng đến trang chủ không, nếu có hãy trả về thêm trường "auto_redirect": true, và "redirect_url": "${DOMAIN}/something-url", tôi sẽ tự re-direct người dùng đến trang đó.
     - Nhớ là hỏi trước ý định của người dùng có muốn tự động chuyển hướng hay không, nếu có thì mới trả về trường auto_redirect và redirect_url.
     - Nếu người dùng nhắn thẳng, khẳng định muốn tự động chuyển hướng luôn mà chưa cần hỏi thì hãy trả về trường auto_redirect là true và redirect_url là đường dẫn mà bạn muốn chuyển hướng.
     - Nếu người dùng xác nhận muốn tự động chuyển hướng thì hãy mô phỏng delay 3 giây (css cho spin, hoặc bạn có thể làm gì đó) để tôi có thể tự động chuyển hướng.
-    - Nếu dùng thẻ a, hãy css cho nó đặc biệt chút để người dùng dễ nhận biết.
+    - Nếu dùng thẻ a, hãy thêm một chút css cho nó.
     - Trả lời dưới dạng JSON với cấu trúc như sau:
     {
       "intent": "guide_website",
@@ -742,7 +743,7 @@ const handleProductSimple = async (find: any) => {
 const handleProductVariations = async (find: any, object: any) => {
   try {
     delete find.$or;
-    console.log(find);
+    console.log(object);
 
     const variation_options = object.variation_options || [];
 
