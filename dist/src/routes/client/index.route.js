@@ -53,6 +53,7 @@ const blog_route_1 = __importDefault(require("./blog.route"));
 const search_route_1 = __importDefault(require("./search.route"));
 const transaction_route_1 = __importDefault(require("./transaction.route"));
 const chatbot_route_1 = __importDefault(require("./chatbot.route"));
+const suggestion_route_1 = __importDefault(require("./suggestion.route"));
 const ClientRoute = (app) => {
     app.use("/auth", auth_route_1.default);
     app.use("/categories", category_route_1.default);
@@ -63,6 +64,7 @@ const ClientRoute = (app) => {
     app.use("/blogs", blog_route_1.default);
     app.use("/search", search_route_1.default);
     app.use("/chatbot", chatbot_route_1.default);
+    app.use("/suggestions", suggestion_route_1.default);
     app.use("/cart", authMiddleware.isAccess, cart_route_1.default);
     app.use("/address", authMiddleware.isAccess, address_route_1.default);
     app.use("/payments", authMiddleware.isAccess, pament_route_1.default);

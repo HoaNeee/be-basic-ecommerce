@@ -47,7 +47,7 @@ const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const node_http_1 = __importDefault(require("node:http"));
 const socket_io_1 = require("socket.io");
 const socket = __importStar(require("./socket"));
-const express_session_1 = __importDefault(require("express-session"));
+const express_session_1 = __importStar(require("express-session"));
 const express_rate_limit_1 = require("express-rate-limit");
 const connect_mongo_1 = __importDefault(require("connect-mongo"));
 const limiter = (0, express_rate_limit_1.rateLimit)({
@@ -96,11 +96,13 @@ app.use((0, express_session_1.default)({
         : {
             secure: false,
         },
-    store: connect_mongo_1.default.create({
-        mongoUrl: process.env.MONGO_URL,
-        collectionName: "sessions",
-        ttl: 2 * 24 * 60 * 60,
-    }),
+    store: process.env.NODE_ENV === "production"
+        ? connect_mongo_1.default.create({
+            mongoUrl: process.env.MONGO_URL,
+            collectionName: "sessions",
+            ttl: 2 * 24 * 60 * 60,
+        })
+        : new express_session_1.MemoryStore(),
 }));
 app.use(limiter);
 (0, index_route_2.default)(app);

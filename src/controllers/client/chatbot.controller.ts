@@ -73,12 +73,17 @@ export const chatBot = async (req: MyRequest, res: Response) => {
       req.body.message ||
       `Xin chào, bạn thế nào? Chúng ta có thể nói chuyện không!`;
 
-    const { intent } = await getIntent(input, req);
+    const intent = await getIntent(input, req, res, chat);
     console.log("intent", intent);
+
+    if (!intent) {
+      return;
+    }
 
     switch (intent) {
       case "search_product":
-        return await promptProduct(req, res, input, chat, intent);
+        const products = await getProductsWithFields(input, req);
+        return await promptProduct(req, res, input, chat, intent, products);
       case "product_detail":
         return await promptProductDetail(req, res, input, chat, intent);
       case "search_blog":
@@ -110,10 +115,6 @@ export const chatBot = async (req: MyRequest, res: Response) => {
         });
         return;
       default:
-        res.json({
-          code: 400,
-          message: "Intent not recognized",
-        });
         return;
     }
   } catch (error) {
@@ -162,24 +163,79 @@ const createOrGetChatHistory = async (
   }
 };
 
-const getIntent = async (input: string, req: Request) => {
+const getIntent = async (
+  input: string,
+  req: Request,
+  res: Response,
+  chatModel: Chat
+) => {
   try {
     const chat = chatHistory.get(req.session["sid"])?.history || [];
 
     const formattedChat = formattedChatHelper(chat);
 
+    let userState = req.session["userState"];
+
+    if (!userState) {
+      req.session["userState"] = {
+        lastIntent: "",
+        lastQuery: {},
+      };
+      userState = req.session["userState"];
+    }
+
+    const [categoriesMap, optionsMap] = await getCategoriesAndOptions();
+
     // - "website_info": Thông tin về website
 
     const classicPrompt = `Bạn là một trợ lý ảo của một trang web bán hàng, người dùng gửi câu sau "${input}"
-      Hãy dựa vào lịch sử trò chuyện sau: ${JSON.stringify(formattedChat)}
-      
+    
+      Dữ liệu tham khảo cho việc phân tích intent:
+      - Lịch sử trò chuyện: ${JSON.stringify(
+        formattedChat.slice(Math.max(formattedChat.length - 3, 0))
+      )}
+      - State của người dùng: ${JSON.stringify(userState)}
+
       Xác định intent và trả về 'intent' chính xác nhất trong số các intent sau:
       - "search_product": Tìm kiếm sản phẩm
       - "product_detail": Chi tiết sản phẩm
       - "small_talk": Nói chuyện nhỏ
       - "search_blog": Tìm kiếm bài viết
       - "guide_website": Hướng dẫn sử dụng website, ví dụ như: đi tới trang sản phẩm, trang giỏ hàng, trang thanh toán, trang đăng nhập, trang đăng ký, trang chi tiết sản phẩm, "tôi muốn biết trang đơn hàng của tôi ở đâu, tôi muốn biết chỉnh theme thế nào"
-      Chỉ trả về dạng JSON: { "intent": "..." }
+
+      - Nếu intent mới khác với intent trước đó của người dùng, hãy cập nhật state của người dùng với intent mới và query mới (nếu có) và "new" là true.
+      - Nếu intent mới giống thì hãy cập nhật userState.lastQuery với query mới (nếu là intent dạng search).
+
+      - Dữ liệu tham khảo thêm cho việc cập nhật userState.lastQuery:
+      - Hãy nhớ đi theo format đã có của userState.
+      - Dựa vào input của người dùng để trích xuất các thông tin cần thiết (thêm, cập nhật, xóa field).
+      - Nếu intent là search_product:
+        + Danh sách danh mục (dạng: tên:danh_mục_id): ${categoriesMap}
+        + Danh sách tùy chọn biến thể (dạng: tên:option_id): ${optionsMap}
+        + Chú ý: 
+          - Bạn có thể trích xuất tiêu đề sản phẩm nếu có (title nếu là tiếng việt thì chuyển sang tiếng anh, và nên để tối đa 1 từ mà bạn thấy có thể search ví dụ: Đôi giày Nike xịn -> "shoes" hoặc "Nike", Áo thun đẹp -> "tshirt").
+          - Trường 'userState.query.productType' là "variations" nếu có biến thể, "simple" nếu không, biến thể là các tùy chọn như màu sắc, kích thước.. (nếu có).
+          - Nếu có đề cập đến tùy chọn như màu, size..., hãy trả về 'variation_options' là danh sách '_id' phù hợp và productType là "variations".
+
+      - Nếu intent là search_blog:
+        + Danh sách tags (dạng: tên): ${formattedChat
+          .map((msg) => msg.data?.map((item: any) => item.tags).join(", "))
+          .join(", ")}
+        + Danh sách tiêu đề bài viết cho việc dễ match (dạng: tên): ${formattedChat
+          .map((msg) => msg.data?.map((item: any) => item.title).join(", "))
+          .join(", ")}
+
+      Chỉ trả về dạng JSON: 
+      { 
+      "intent": "...",
+      "new": true | false, // nếu intent mới khác với intent trước đó của người dùng
+      "query": {
+        "title": "...", // nếu có
+        "categories": ["id1", "id2"], // nếu có
+        "productType": "variations" | "simple" // nếu có với search_product
+        "variation_options": ["id3", "id4"], // nếu có
+        "tags": ["tag1", "tag2"] // nếu có với search_blog,
+      }
     `;
 
     const response = await gemAI.models.generateContent({
@@ -192,7 +248,29 @@ const getIntent = async (input: string, req: Request) => {
       response.text.lastIndexOf("}") + 1
     );
 
-    return JSON.parse(output);
+    const object = JSON.parse(output);
+
+    console.log(object);
+
+    req.session["userState"] = object.userState;
+
+    if (!object.new && object.intent === "search_product") {
+      if (object.intent === "search_product") {
+        const products = await getproducts(object.query, req);
+        await promptProduct(
+          req,
+          res,
+          input,
+          chatModel,
+          object.intent,
+          products
+        );
+      }
+
+      return "";
+    }
+
+    return object.intent;
   } catch (error) {
     console.error("Error occurred while getting intent:", error);
     throw error;
@@ -282,13 +360,14 @@ const promptProduct = async (
   res: Response,
   input: string,
   chat: Chat,
-  intent: string
+  intent: string,
+  products: any[] = []
 ) => {
-  const products = await getProducts(input);
   const prompt = `Đây là danh sách sản phẩm dưới dạng JSON sau khi phân tích yêu cầu của người dùng "${input}": ${JSON.stringify(
     products
   )}, 
         - Hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng và cung cấp thông tin về sản phẩm này nhé.
+        - Dựa vào lịch sử trò chuyện + các input đã có của người dùng, hãy trả lời sao cho phù hợp, nối tiếp cuộc trò chuyện, ví dụ "tôi muốn một chiếc áo", input sau có thể là "Thêm màu đỏ", và có thể tiếp là: "Thêm kích thước L".
         - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt.
         - Nếu là câu hỏi đầu tiên thì hãy bắt đầu với xin chào còn không thì không cần xin chào.
         - Nếu không có sản phẩm nào phù hợp hãy trả lời khéo và nói rằng không tìm thấy sản phẩm nào phù hợp với yêu cầu của người dùng.
@@ -577,36 +656,9 @@ const getBlogs = async (input: string) => {
   }
 };
 
-const getProducts = async (input: string) => {
+const getProductsWithFields = async (input: string, req: Request) => {
   try {
-    const categories = await Category.find({ deleted: false })
-      .select("title")
-      .lean();
-    const categoriesMap = categories
-      .map((cat) => {
-        return `${cat.title}:${String(cat._id)}`;
-      })
-      .join(", ");
-
-    const variations = await Variation.find({ deleted: false })
-      .select("title _id")
-      .lean();
-    const variationIds = variations.map((variation) =>
-      variation._id.toString()
-    );
-
-    const variationOptions = await VariationOption.find({
-      variation_id: { $in: variationIds },
-      deleted: false,
-    })
-      .select("title _id")
-      .lean();
-
-    const optionsMap = variationOptions
-      .map((opt) => {
-        return `${opt.title}:${String(opt._id)}`;
-      })
-      .join(",");
+    const [categoriesMap, optionsMap] = await getCategoriesAndOptions();
 
     const prompt = `Bạn là một trợ lý ảo của một trang web bán hàng, nhiệm vụ của bạn là phân tích yêu cầu của người dùng và xuất ra dữ liệu có cấu trúc dạng JSON theo mẫu bên dưới. Không cần giải thích gì thêm.
 
@@ -659,6 +711,15 @@ const getProducts = async (input: string) => {
 
     const object = JSON.parse(output);
 
+    return await getproducts(object, req);
+  } catch (error) {
+    console.error("Error products:", error);
+    throw error;
+  }
+};
+
+const getproducts = async (object: any, req: Request) => {
+  try {
     let find: any = {
       deleted: false,
     };
@@ -683,12 +744,17 @@ const getProducts = async (input: string) => {
       ];
     }
 
+    req.session["userState"] = {
+      lastIntent: "search_product",
+      lastQuery: object,
+    };
     if (object.productType === "simple") {
-      const products = await handleProductSimple(find);
+      const products = await handleProductSimple(find, req);
       return products;
     }
+
     find.productType = "variations";
-    const products = await handleProductVariations(find, object);
+    const products = await handleProductVariations(find, object, req);
     return products;
   } catch (error) {
     console.error("Error products:", error);
@@ -696,9 +762,48 @@ const getProducts = async (input: string) => {
   }
 };
 
-const handleProductSimple = async (find: any) => {
+const getCategoriesAndOptions = async () => {
+  try {
+    const categories = await Category.find({ deleted: false })
+      .select("title")
+      .lean();
+    const categoriesMap = categories
+      .map((cat) => {
+        return `${cat.title}:${String(cat._id)}`;
+      })
+      .join(", ");
+
+    const variations = await Variation.find({ deleted: false })
+      .select("title _id")
+      .lean();
+    const variationIds = variations.map((variation) =>
+      variation._id.toString()
+    );
+
+    const variationOptions = await VariationOption.find({
+      variation_id: { $in: variationIds },
+      deleted: false,
+    })
+      .select("title _id")
+      .lean();
+
+    const optionsMap = variationOptions
+      .map((opt) => {
+        return `${opt.title}:${String(opt._id)}`;
+      })
+      .join(",");
+
+    return [categoriesMap, optionsMap];
+  } catch (error) {
+    console.error("Error getting categories and options:", error);
+    throw error;
+  }
+};
+
+const handleProductSimple = async (find: any, req: Request) => {
   try {
     console.log("find", find);
+
     const products = await Product.aggregate([
       { $match: find },
       {
@@ -730,6 +835,9 @@ const handleProductSimple = async (find: any) => {
           },
         },
       },
+      {
+        $unset: ["subProducts", "product_id_string"],
+      },
       { $limit: 5 },
     ]);
 
@@ -740,14 +848,18 @@ const handleProductSimple = async (find: any) => {
   }
 };
 
-const handleProductVariations = async (find: any, object: any) => {
+const handleProductVariations = async (
+  find: any,
+  object: any,
+  req: Request
+) => {
   try {
     delete find.$or;
     console.log(object);
 
     const variation_options = object.variation_options || [];
 
-    const products = await Product.find(find);
+    const products = await Product.find(find).lean();
 
     const productIds = products.map((product) => product._id.toString());
     let findSub: any = {
@@ -769,41 +881,58 @@ const handleProductVariations = async (find: any, object: any) => {
     const subProducts = await SubProduct.find(findSub).lean();
     const subIds = subProducts.map((sub) => sub._id.toString());
 
-    const [subOptions, options] = await Promise.all([
-      SubProductOption.find({
-        sub_product_id: { $in: subIds },
-        variation_option_id: { $in: variation_options },
-        deleted: false,
-      }),
-      VariationOption.find({
-        _id: { $in: variation_options },
-        deleted: false,
-      }),
-    ]);
+    const subOptions = await SubProductOption.find({
+      sub_product_id: { $in: subIds },
+      deleted: false,
+    }).lean();
+
+    const option_ids = subOptions.map((item) =>
+      item.variation_option_id.toString()
+    );
+
+    const options = await VariationOption.find({
+      _id: { $in: option_ids },
+      deleted: false,
+    }).lean();
 
     const subOptionsMap = groupByArray(subOptions, "sub_product_id");
 
     const response = [];
 
     for (const sub of subProducts) {
-      if (subOptionsMap.get(sub._id.toString())) {
-        const opts = subOptionsMap.get(sub._id.toString());
+      if (
+        subOptionsMap.get(String(sub._id)) &&
+        subOptionsMap.get(String(sub._id)).length > 0
+      ) {
+        const opts = subOptionsMap.get(String(sub._id));
+
         sub["options"] = [];
         for (const opt of opts) {
-          const optionObject = options.find(
-            (o) => o._id.toString() === opt.variation_option_id.toString()
-          );
+          const optionObject = options.find((o) => {
+            return String(o._id) === String(opt.variation_option_id);
+          });
           if (optionObject) {
             sub["options"].push(optionObject);
           }
         }
-        const product = products.find(
-          (p) => p._id.toString() === sub.product_id.toString()
-        );
-        sub["slug"] = product ? product.slug : "";
-        sub["thumbnail_product"] = product ? product.thumbnail : "";
-        sub["title"] = product ? product.title : "";
-        response.push(sub);
+      }
+      if (sub["options"] && sub["options"].length > 0) {
+        const ids = sub["options"].map((o: any) => String(o._id));
+        if (variation_options.length > 0) {
+          const isValid = variation_options.every((id: string) =>
+            ids.includes(id)
+          );
+          if (!isValid) {
+            continue;
+          }
+          const product = products.find(
+            (p) => String(p._id) === String(sub.product_id)
+          );
+          sub["slug"] = product ? product.slug : "";
+          sub["thumbnail_product"] = product ? product.thumbnail : "";
+          sub["title"] = product ? product.title : "";
+          response.push(sub);
+        }
       }
     }
 

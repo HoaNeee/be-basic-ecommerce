@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { rateLimit } from "express-rate-limit";
 
 import * as controller from "../../controllers/client/auth.controller";
@@ -6,23 +6,30 @@ import * as authMiddleware from "../../middlewares/client/auth.middleware";
 
 const router: Router = Router();
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
-  message: "Too many requests, please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+const limiter = (max?: number, time?: number, key?: string) => {
+  return rateLimit({
+    windowMs: (time || 10) * 60 * 1000,
+    max: max || 100,
+    message: "Too many requests from this IP, please try again later.",
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req: Request, res: Response) => {
+      return key ? req[key] : undefined;
+    },
+  });
+};
 
-router.post("/login", limiter, controller.login);
-router.post("/register", limiter, controller.register);
+const limiterAuth = limiter(10, 5, "body.email");
+
+router.post("/login", limiterAuth, controller.login);
+router.post("/register", limiterAuth, controller.register);
 router.post("/logout", controller.logout);
 router.post("/google", controller.googleLogin);
 router.get("/profile", authMiddleware.isAccess, controller.getInfo);
 router.patch(
   "/profile/change-password",
   authMiddleware.isAccess,
-  limiter,
+  limiterAuth,
   controller.changePassword
 );
 router.patch(
@@ -34,6 +41,13 @@ router.patch(
   "/profile/change-setting",
   authMiddleware.isAccess,
   controller.changeSetting
+);
+
+router.post("/forgot-password", limiter(100, 15), controller.forgotPassword);
+router.post(
+  "/forgot-password/verify-otp",
+  limiter(100, 15),
+  controller.verifyOTP
 );
 
 const authRouter = router;

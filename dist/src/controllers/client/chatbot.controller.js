@@ -59,11 +59,15 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const chat = yield createOrGetChatHistory(chatHistory, sessionId);
         const input = req.body.message ||
             `Xin chào, bạn thế nào? Chúng ta có thể nói chuyện không!`;
-        const { intent } = yield getIntent(input, req);
+        const intent = yield getIntent(input, req, res, chat);
         console.log("intent", intent);
+        if (!intent) {
+            return;
+        }
         switch (intent) {
             case "search_product":
-                return yield promptProduct(req, res, input, chat, intent);
+                const products = yield getProductsWithFields(input, req);
+                return yield promptProduct(req, res, input, chat, intent, products);
             case "product_detail":
                 return yield promptProductDetail(req, res, input, chat, intent);
             case "search_blog":
@@ -92,10 +96,6 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 });
                 return;
             default:
-                res.json({
-                    code: 400,
-                    message: "Intent not recognized",
-                });
                 return;
         }
     }
@@ -141,28 +141,83 @@ const createOrGetChatHistory = (map, sessionId) => __awaiter(void 0, void 0, voi
         throw error;
     }
 });
-const getIntent = (input, req) => __awaiter(void 0, void 0, void 0, function* () {
+const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
         const chat = ((_a = chatHistory.get(req.session["sid"])) === null || _a === void 0 ? void 0 : _a.history) || [];
         const formattedChat = formattedChatHelper(chat);
+        let userState = req.session["userState"];
+        if (!userState) {
+            req.session["userState"] = {
+                lastIntent: "",
+                lastQuery: {},
+            };
+            userState = req.session["userState"];
+        }
+        const [categoriesMap, optionsMap] = yield getCategoriesAndOptions();
         const classicPrompt = `Bạn là một trợ lý ảo của một trang web bán hàng, người dùng gửi câu sau "${input}"
-      Hãy dựa vào lịch sử trò chuyện sau: ${JSON.stringify(formattedChat)}
-      
+    
+      Dữ liệu tham khảo cho việc phân tích intent:
+      - Lịch sử trò chuyện: ${JSON.stringify(formattedChat.slice(Math.max(formattedChat.length - 3, 0)))}
+      - State của người dùng: ${JSON.stringify(userState)}
+
       Xác định intent và trả về 'intent' chính xác nhất trong số các intent sau:
       - "search_product": Tìm kiếm sản phẩm
       - "product_detail": Chi tiết sản phẩm
       - "small_talk": Nói chuyện nhỏ
       - "search_blog": Tìm kiếm bài viết
       - "guide_website": Hướng dẫn sử dụng website, ví dụ như: đi tới trang sản phẩm, trang giỏ hàng, trang thanh toán, trang đăng nhập, trang đăng ký, trang chi tiết sản phẩm, "tôi muốn biết trang đơn hàng của tôi ở đâu, tôi muốn biết chỉnh theme thế nào"
-      Chỉ trả về dạng JSON: { "intent": "..." }
+
+      - Nếu intent mới khác với intent trước đó của người dùng, hãy cập nhật state của người dùng với intent mới và query mới (nếu có) và "new" là true.
+      - Nếu intent mới giống thì hãy cập nhật userState.lastQuery với query mới (nếu là intent dạng search).
+
+      - Dữ liệu tham khảo thêm cho việc cập nhật userState.lastQuery:
+      - Hãy nhớ đi theo format đã có của userState.
+      - Dựa vào input của người dùng để trích xuất các thông tin cần thiết (thêm, cập nhật, xóa field).
+      - Nếu intent là search_product:
+        + Danh sách danh mục (dạng: tên:danh_mục_id): ${categoriesMap}
+        + Danh sách tùy chọn biến thể (dạng: tên:option_id): ${optionsMap}
+        + Chú ý: 
+          - Bạn có thể trích xuất tiêu đề sản phẩm nếu có (title nếu là tiếng việt thì chuyển sang tiếng anh, và nên để tối đa 1 từ mà bạn thấy có thể search ví dụ: Đôi giày Nike xịn -> "shoes" hoặc "Nike", Áo thun đẹp -> "tshirt").
+          - Trường 'userState.query.productType' là "variations" nếu có biến thể, "simple" nếu không, biến thể là các tùy chọn như màu sắc, kích thước.. (nếu có).
+          - Nếu có đề cập đến tùy chọn như màu, size..., hãy trả về 'variation_options' là danh sách '_id' phù hợp và productType là "variations".
+
+      - Nếu intent là search_blog:
+        + Danh sách tags (dạng: tên): ${formattedChat
+            .map((msg) => { var _a; return (_a = msg.data) === null || _a === void 0 ? void 0 : _a.map((item) => item.tags).join(", "); })
+            .join(", ")}
+        + Danh sách tiêu đề bài viết cho việc dễ match (dạng: tên): ${formattedChat
+            .map((msg) => { var _a; return (_a = msg.data) === null || _a === void 0 ? void 0 : _a.map((item) => item.title).join(", "); })
+            .join(", ")}
+
+      Chỉ trả về dạng JSON: 
+      { 
+      "intent": "...",
+      "new": true | false, // nếu intent mới khác với intent trước đó của người dùng
+      "query": {
+        "title": "...", // nếu có
+        "categories": ["id1", "id2"], // nếu có
+        "productType": "variations" | "simple" // nếu có với search_product
+        "variation_options": ["id3", "id4"], // nếu có
+        "tags": ["tag1", "tag2"] // nếu có với search_blog,
+      }
     `;
         const response = yield gemAI.models.generateContent({
             model: "gemini-2.0-flash",
             contents: classicPrompt,
         });
         const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);
-        return JSON.parse(output);
+        const object = JSON.parse(output);
+        console.log(object);
+        req.session["userState"] = object.userState;
+        if (!object.new && object.intent === "search_product") {
+            if (object.intent === "search_product") {
+                const products = yield getproducts(object.query, req);
+                yield promptProduct(req, res, input, chatModel, object.intent, products);
+            }
+            return "";
+        }
+        return object.intent;
     }
     catch (error) {
         console.error("Error occurred while getting intent:", error);
@@ -231,10 +286,10 @@ const promptProductDetail = (req, res, input, chat, intent) => __awaiter(void 0,
         },
     });
 });
-const promptProduct = (req, res, input, chat, intent) => __awaiter(void 0, void 0, void 0, function* () {
-    const products = yield getProducts(input);
+const promptProduct = (req_1, res_1, input_1, chat_1, intent_1, ...args_1) => __awaiter(void 0, [req_1, res_1, input_1, chat_1, intent_1, ...args_1], void 0, function* (req, res, input, chat, intent, products = []) {
     const prompt = `Đây là danh sách sản phẩm dưới dạng JSON sau khi phân tích yêu cầu của người dùng "${input}": ${JSON.stringify(products)}, 
         - Hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng và cung cấp thông tin về sản phẩm này nhé.
+        - Dựa vào lịch sử trò chuyện + các input đã có của người dùng, hãy trả lời sao cho phù hợp, nối tiếp cuộc trò chuyện, ví dụ "tôi muốn một chiếc áo", input sau có thể là "Thêm màu đỏ", và có thể tiếp là: "Thêm kích thước L".
         - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt.
         - Nếu là câu hỏi đầu tiên thì hãy bắt đầu với xin chào còn không thì không cần xin chào.
         - Nếu không có sản phẩm nào phù hợp hãy trả lời khéo và nói rằng không tìm thấy sản phẩm nào phù hợp với yêu cầu của người dùng.
@@ -464,31 +519,9 @@ const getBlogs = (input) => __awaiter(void 0, void 0, void 0, function* () {
         throw error;
     }
 });
-const getProducts = (input) => __awaiter(void 0, void 0, void 0, function* () {
+const getProductsWithFields = (input, req) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const categories = yield category_model_1.default.find({ deleted: false })
-            .select("title")
-            .lean();
-        const categoriesMap = categories
-            .map((cat) => {
-            return `${cat.title}:${String(cat._id)}`;
-        })
-            .join(", ");
-        const variations = yield variation_model_1.default.find({ deleted: false })
-            .select("title _id")
-            .lean();
-        const variationIds = variations.map((variation) => variation._id.toString());
-        const variationOptions = yield variationOption_model_1.default.find({
-            variation_id: { $in: variationIds },
-            deleted: false,
-        })
-            .select("title _id")
-            .lean();
-        const optionsMap = variationOptions
-            .map((opt) => {
-            return `${opt.title}:${String(opt._id)}`;
-        })
-            .join(",");
+        const [categoriesMap, optionsMap] = yield getCategoriesAndOptions();
         const prompt = `Bạn là một trợ lý ảo của một trang web bán hàng, nhiệm vụ của bạn là phân tích yêu cầu của người dùng và xuất ra dữ liệu có cấu trúc dạng JSON theo mẫu bên dưới. Không cần giải thích gì thêm.
 
     Người dùng hỏi: "${input}"
@@ -533,6 +566,15 @@ const getProducts = (input) => __awaiter(void 0, void 0, void 0, function* () {
         });
         const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);
         const object = JSON.parse(output);
+        return yield getproducts(object, req);
+    }
+    catch (error) {
+        console.error("Error products:", error);
+        throw error;
+    }
+});
+const getproducts = (object, req) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
         let find = {
             deleted: false,
         };
@@ -553,12 +595,16 @@ const getProducts = (input) => __awaiter(void 0, void 0, void 0, function* () {
                 },
             ];
         }
+        req.session["userState"] = {
+            lastIntent: "search_product",
+            lastQuery: object,
+        };
         if (object.productType === "simple") {
-            const products = yield handleProductSimple(find);
+            const products = yield handleProductSimple(find, req);
             return products;
         }
         find.productType = "variations";
-        const products = yield handleProductVariations(find, object);
+        const products = yield handleProductVariations(find, object, req);
         return products;
     }
     catch (error) {
@@ -566,7 +612,39 @@ const getProducts = (input) => __awaiter(void 0, void 0, void 0, function* () {
         throw error;
     }
 });
-const handleProductSimple = (find) => __awaiter(void 0, void 0, void 0, function* () {
+const getCategoriesAndOptions = () => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const categories = yield category_model_1.default.find({ deleted: false })
+            .select("title")
+            .lean();
+        const categoriesMap = categories
+            .map((cat) => {
+            return `${cat.title}:${String(cat._id)}`;
+        })
+            .join(", ");
+        const variations = yield variation_model_1.default.find({ deleted: false })
+            .select("title _id")
+            .lean();
+        const variationIds = variations.map((variation) => variation._id.toString());
+        const variationOptions = yield variationOption_model_1.default.find({
+            variation_id: { $in: variationIds },
+            deleted: false,
+        })
+            .select("title _id")
+            .lean();
+        const optionsMap = variationOptions
+            .map((opt) => {
+            return `${opt.title}:${String(opt._id)}`;
+        })
+            .join(",");
+        return [categoriesMap, optionsMap];
+    }
+    catch (error) {
+        console.error("Error getting categories and options:", error);
+        throw error;
+    }
+});
+const handleProductSimple = (find, req) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         console.log("find", find);
         const products = yield product_model_1.default.aggregate([
@@ -600,6 +678,9 @@ const handleProductSimple = (find) => __awaiter(void 0, void 0, void 0, function
                     },
                 },
             },
+            {
+                $unset: ["subProducts", "product_id_string"],
+            },
             { $limit: 5 },
         ]);
         return products;
@@ -609,12 +690,12 @@ const handleProductSimple = (find) => __awaiter(void 0, void 0, void 0, function
         throw error;
     }
 });
-const handleProductVariations = (find, object) => __awaiter(void 0, void 0, void 0, function* () {
+const handleProductVariations = (find, object, req) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         delete find.$or;
         console.log(object);
         const variation_options = object.variation_options || [];
-        const products = yield product_model_1.default.find(find);
+        const products = yield product_model_1.default.find(find).lean();
         const productIds = products.map((product) => product._id.toString());
         let findSub = {
             product_id: { $in: productIds },
@@ -633,34 +714,44 @@ const handleProductVariations = (find, object) => __awaiter(void 0, void 0, void
         }
         const subProducts = yield subProduct_model_1.default.find(findSub).lean();
         const subIds = subProducts.map((sub) => sub._id.toString());
-        const [subOptions, options] = yield Promise.all([
-            subProductOption_model_1.default.find({
-                sub_product_id: { $in: subIds },
-                variation_option_id: { $in: variation_options },
-                deleted: false,
-            }),
-            variationOption_model_1.default.find({
-                _id: { $in: variation_options },
-                deleted: false,
-            }),
-        ]);
+        const subOptions = yield subProductOption_model_1.default.find({
+            sub_product_id: { $in: subIds },
+            deleted: false,
+        }).lean();
+        const option_ids = subOptions.map((item) => item.variation_option_id.toString());
+        const options = yield variationOption_model_1.default.find({
+            _id: { $in: option_ids },
+            deleted: false,
+        }).lean();
         const subOptionsMap = (0, groupBy_1.groupByArray)(subOptions, "sub_product_id");
         const response = [];
         for (const sub of subProducts) {
-            if (subOptionsMap.get(sub._id.toString())) {
-                const opts = subOptionsMap.get(sub._id.toString());
+            if (subOptionsMap.get(String(sub._id)) &&
+                subOptionsMap.get(String(sub._id)).length > 0) {
+                const opts = subOptionsMap.get(String(sub._id));
                 sub["options"] = [];
                 for (const opt of opts) {
-                    const optionObject = options.find((o) => o._id.toString() === opt.variation_option_id.toString());
+                    const optionObject = options.find((o) => {
+                        return String(o._id) === String(opt.variation_option_id);
+                    });
                     if (optionObject) {
                         sub["options"].push(optionObject);
                     }
                 }
-                const product = products.find((p) => p._id.toString() === sub.product_id.toString());
-                sub["slug"] = product ? product.slug : "";
-                sub["thumbnail_product"] = product ? product.thumbnail : "";
-                sub["title"] = product ? product.title : "";
-                response.push(sub);
+            }
+            if (sub["options"] && sub["options"].length > 0) {
+                const ids = sub["options"].map((o) => String(o._id));
+                if (variation_options.length > 0) {
+                    const isValid = variation_options.every((id) => ids.includes(id));
+                    if (!isValid) {
+                        continue;
+                    }
+                    const product = products.find((p) => String(p._id) === String(sub.product_id));
+                    sub["slug"] = product ? product.slug : "";
+                    sub["thumbnail_product"] = product ? product.thumbnail : "";
+                    sub["title"] = product ? product.title : "";
+                    response.push(sub);
+                }
             }
         }
         return response.slice(0, 5);

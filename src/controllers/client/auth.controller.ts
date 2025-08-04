@@ -5,6 +5,9 @@ import Customer from "../../models/customer.model";
 import { MyRequest } from "../../middlewares/client/auth.middleware";
 import Cart from "../../models/cart.model";
 import Notification from "../../models/notification.model";
+import * as genarateHelper from "../../../helpers/generateString";
+import { sendMail } from "../../../helpers/sendMail";
+import ForgotPassword from "../../models/forgotPassword.model";
 
 let enviroment = process.env.NODE_ENV || "dev";
 
@@ -473,6 +476,178 @@ export const googleLogin = async (req: Request, res: Response) => {
       code: 500,
       message: error.message,
     });
+  }
+};
+
+// [POST] /auth/forgot-password
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const email = req.body.email;
+
+    if (!email) {
+      throw Error("Email is required!");
+    }
+
+    rateForgotPasswordLimit(req);
+
+    const exist = await Customer.findOne({
+      email: email,
+      deleted: false,
+    });
+
+    if (!exist) {
+      throw Error("Email not found!");
+    }
+
+    if (exist.provider === "google") {
+      throw Error("You are using Google account, please login with Google!");
+    }
+
+    const existEmailInForgotPassword = await ForgotPassword.findOne({
+      email: email,
+    });
+
+    if (existEmailInForgotPassword) {
+      const expiredAt = existEmailInForgotPassword.expiredAt;
+
+      res.json({
+        code: 200,
+        message: "Check email success!",
+        data: {
+          email: email,
+          expiredAt: expiredAt,
+        },
+      });
+
+      return;
+    }
+
+    const otp = genarateHelper.number(6);
+
+    const record = new ForgotPassword({
+      email: email,
+      otp: otp,
+    });
+
+    await record.save();
+
+    const subject = "Forgot Password - Your OTP Code";
+    const html = `
+    <h1>Forgot Password</h1>
+    <p>We received a request to reset your password. Use the following OTP code to reset your password:</p>
+    <p>OTP will expire in 3 minutes</p>
+    <h2 style="color: #000;">${otp}</h2>
+    <p>If you did not request this, please ignore this email.</p>
+    <p>Thank you!</p>
+    `;
+    sendMail(email, subject, html);
+
+    res.json({
+      code: 200,
+      message: "Check email success!",
+      data: {
+        email: email,
+        expiredAt: record.expiredAt,
+      },
+    });
+  } catch (error) {
+    res.json({
+      code: 400,
+      message: error.message,
+    });
+  }
+};
+
+// [POST] /auth/forgot-password/verify-otp
+export const verifyOTP = async (req: Request, res: Response) => {
+  try {
+    const email = req.body.email;
+
+    const otp = req.body.otp;
+
+    if (!email || !otp) {
+      throw Error("Email and OTP are required!");
+    }
+
+    const record = await ForgotPassword.findOne({
+      email: email,
+    });
+
+    if (!record) {
+      throw Error("OTP expired or invalid!");
+    }
+
+    if (record.otp !== otp) {
+      throw Error("Invalid OTP!");
+    }
+
+    const newPassword = genarateHelper.number(6);
+
+    const customer = await Customer.findOne({
+      email: email,
+      deleted: false,
+    });
+
+    if (!customer) {
+      throw Error("Email not found!");
+    }
+
+    customer.password = md5(newPassword);
+    await customer.save();
+
+    await ForgotPassword.deleteOne({
+      email: email,
+    });
+
+    const subject = "Change Password successfully";
+    const html = `
+    <h1>Change Password</h1>
+    <p>Your password has been changed successfully. Here are your new login credentials:</p>
+    <p>Email: ${email}</p>
+    <p>Password: ${newPassword}</p>
+    <p>Please log in with your new password.</p>
+    <p>If you did not request this change, please contact support immediately.</p>
+    <p>Thank you!</p>
+    `;
+    sendMail(email, subject, html);
+
+    res.json({
+      code: 200,
+      message: "Verify OTP success!",
+    });
+  } catch (error) {
+    res.json({
+      code: 400,
+      message: error.message,
+    });
+  }
+};
+
+const rateForgotPasswordLimit = (req: Request) => {
+  const emailPrev = req.session["forgot_email"];
+  const email = req.body.email;
+
+  if (!emailPrev) {
+    req.session["forgot_email"] = email;
+    req.session["forgot_count"] = 1;
+  } else {
+    if (emailPrev !== email) {
+      req.session["forgot_email"] = email;
+      req.session["forgot_count"] = 1;
+    } else {
+      const expire = req.session["forgot_count_expire"];
+      if (expire && Date.now() > expire) {
+        req.session["forgot_count"] = 1;
+      }
+      const count = req.session["forgot_count"];
+      if (count >= 5) {
+        throw Error(
+          "You have reached the maximum number of requests. Please try again later."
+        );
+      }
+      req.session["forgot_count_expire"] = Date.now() + 1000 * 60 * 5;
+      req.session["forgot_count"] = count + 1;
+    }
   }
 };
 

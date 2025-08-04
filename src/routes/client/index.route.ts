@@ -16,6 +16,7 @@ import blogRouter from "./blog.route";
 import searchRouter from "./search.route";
 import transactionRouter from "./transaction.route";
 import chatBotRouter from "./chatbot.route";
+import suggestRouter from "./suggestion.route";
 
 const ClientRoute = (app: Express) => {
   app.use("/auth", authRouter);
@@ -27,6 +28,7 @@ const ClientRoute = (app: Express) => {
   app.use("/blogs", blogRouter);
   app.use("/search", searchRouter);
   app.use("/chatbot", chatBotRouter);
+  app.use("/suggestions", suggestRouter);
 
   app.use("/cart", authMiddleware.isAccess, cartRouter);
   app.use("/address", authMiddleware.isAccess, addressRouter);

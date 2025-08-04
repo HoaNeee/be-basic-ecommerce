@@ -9,7 +9,7 @@ import cookieParser from "cookie-parser";
 import http from "node:http";
 import { Server } from "socket.io";
 import * as socket from "./socket";
-import session from "express-session";
+import session, { MemoryStore } from "express-session";
 import { rateLimit } from "express-rate-limit";
 import MongoStore from "connect-mongo";
 
@@ -71,11 +71,14 @@ app.use(
         : {
             secure: false,
           },
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGO_URL,
-      collectionName: "sessions",
-      ttl: 2 * 24 * 60 * 60, // = 14 days. Default
-    }),
+    store:
+      process.env.NODE_ENV === "production"
+        ? MongoStore.create({
+            mongoUrl: process.env.MONGO_URL,
+            collectionName: "sessions",
+            ttl: 2 * 24 * 60 * 60,
+          })
+        : new MemoryStore(),
   })
 );
 app.use(limiter);

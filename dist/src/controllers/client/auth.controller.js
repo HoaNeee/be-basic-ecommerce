@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -12,12 +45,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.googleLogin = exports.changeSetting = exports.changePassword = exports.logout = exports.getInfo = exports.updateProfile = exports.register = exports.login = exports.clearCookie = void 0;
+exports.verifyOTP = exports.forgotPassword = exports.googleLogin = exports.changeSetting = exports.changePassword = exports.logout = exports.getInfo = exports.updateProfile = exports.register = exports.login = exports.clearCookie = void 0;
 const getAccessToken_1 = require("../../../helpers/getAccessToken");
 const md5_1 = __importDefault(require("md5"));
 const customer_model_1 = __importDefault(require("../../models/customer.model"));
 const cart_model_1 = __importDefault(require("../../models/cart.model"));
 const notification_model_1 = __importDefault(require("../../models/notification.model"));
+const genarateHelper = __importStar(require("../../../helpers/generateString"));
+const sendMail_1 = require("../../../helpers/sendMail");
+const forgotPassword_model_1 = __importDefault(require("../../models/forgotPassword.model"));
 let enviroment = process.env.NODE_ENV || "dev";
 const clearCookie = (res) => {
     if (enviroment === "dev") {
@@ -398,6 +434,150 @@ const googleLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.googleLogin = googleLogin;
+const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const email = req.body.email;
+        if (!email) {
+            throw Error("Email is required!");
+        }
+        rateForgotPasswordLimit(req);
+        const exist = yield customer_model_1.default.findOne({
+            email: email,
+            deleted: false,
+        });
+        if (!exist) {
+            throw Error("Email not found!");
+        }
+        if (exist.provider === "google") {
+            throw Error("You are using Google account, please login with Google!");
+        }
+        const existEmailInForgotPassword = yield forgotPassword_model_1.default.findOne({
+            email: email,
+        });
+        if (existEmailInForgotPassword) {
+            const expiredAt = existEmailInForgotPassword.expiredAt;
+            res.json({
+                code: 200,
+                message: "Check email success!",
+                data: {
+                    email: email,
+                    expiredAt: expiredAt,
+                },
+            });
+            return;
+        }
+        const otp = genarateHelper.number(6);
+        const record = new forgotPassword_model_1.default({
+            email: email,
+            otp: otp,
+        });
+        yield record.save();
+        const subject = "Forgot Password - Your OTP Code";
+        const html = `
+    <h1>Forgot Password</h1>
+    <p>We received a request to reset your password. Use the following OTP code to reset your password:</p>
+    <p>OTP will expire in 3 minutes</p>
+    <h2 style="color: #000;">${otp}</h2>
+    <p>If you did not request this, please ignore this email.</p>
+    <p>Thank you!</p>
+    `;
+        (0, sendMail_1.sendMail)(email, subject, html);
+        res.json({
+            code: 200,
+            message: "Check email success!",
+            data: {
+                email: email,
+                expiredAt: record.expiredAt,
+            },
+        });
+    }
+    catch (error) {
+        res.json({
+            code: 400,
+            message: error.message,
+        });
+    }
+});
+exports.forgotPassword = forgotPassword;
+const verifyOTP = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const email = req.body.email;
+        const otp = req.body.otp;
+        if (!email || !otp) {
+            throw Error("Email and OTP are required!");
+        }
+        const record = yield forgotPassword_model_1.default.findOne({
+            email: email,
+        });
+        if (!record) {
+            throw Error("OTP expired or invalid!");
+        }
+        if (record.otp !== otp) {
+            throw Error("Invalid OTP!");
+        }
+        const newPassword = genarateHelper.number(6);
+        const customer = yield customer_model_1.default.findOne({
+            email: email,
+            deleted: false,
+        });
+        if (!customer) {
+            throw Error("Email not found!");
+        }
+        customer.password = (0, md5_1.default)(newPassword);
+        yield customer.save();
+        yield forgotPassword_model_1.default.deleteOne({
+            email: email,
+        });
+        const subject = "Change Password successfully";
+        const html = `
+    <h1>Change Password</h1>
+    <p>Your password has been changed successfully. Here are your new login credentials:</p>
+    <p>Email: ${email}</p>
+    <p>Password: ${newPassword}</p>
+    <p>Please log in with your new password.</p>
+    <p>If you did not request this change, please contact support immediately.</p>
+    <p>Thank you!</p>
+    `;
+        (0, sendMail_1.sendMail)(email, subject, html);
+        res.json({
+            code: 200,
+            message: "Verify OTP success!",
+        });
+    }
+    catch (error) {
+        res.json({
+            code: 400,
+            message: error.message,
+        });
+    }
+});
+exports.verifyOTP = verifyOTP;
+const rateForgotPasswordLimit = (req) => {
+    const emailPrev = req.session["forgot_email"];
+    const email = req.body.email;
+    if (!emailPrev) {
+        req.session["forgot_email"] = email;
+        req.session["forgot_count"] = 1;
+    }
+    else {
+        if (emailPrev !== email) {
+            req.session["forgot_email"] = email;
+            req.session["forgot_count"] = 1;
+        }
+        else {
+            const expire = req.session["forgot_count_expire"];
+            if (expire && Date.now() > expire) {
+                req.session["forgot_count"] = 1;
+            }
+            const count = req.session["forgot_count"];
+            if (count >= 5) {
+                throw Error("You have reached the maximum number of requests. Please try again later.");
+            }
+            req.session["forgot_count_expire"] = Date.now() + 1000 * 60 * 5;
+            req.session["forgot_count"] = count + 1;
+        }
+    }
+};
 const handleInfoUser = (code) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const uri = enviroment === "dev"
