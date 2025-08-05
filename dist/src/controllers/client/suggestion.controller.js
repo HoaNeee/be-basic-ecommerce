@@ -14,6 +14,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getTrackedList = exports.trackSuggestion = void 0;
 const product_model_1 = __importDefault(require("../../models/product.model"));
+const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
+const product_1 = require("../../../utils/product");
 const trackSuggestion = function (req, res) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -42,19 +44,28 @@ const getTrackedList = function (req, res) {
                     const product = yield product_model_1.default.findOne({
                         _id: last_tracked.value,
                         deleted: false,
-                    });
+                    }).lean();
+                    if (product && product.productType === "variations") {
+                        const subProducts = yield subProduct_model_1.default.find({
+                            product_id: product._id,
+                            deleted: false,
+                        }).lean();
+                        if (subProducts && subProducts.length > 0) {
+                            (0, product_1.solvePriceStock)(product, subProducts);
+                        }
+                    }
                     const list_suggestion = [
                         {
-                            title: `Bạn có muốn xem chi tiết sản phẩm "${product === null || product === void 0 ? void 0 : product.title}" không?`,
-                            value: `Tôi muốn xem chi tiết sản phẩm "${product === null || product === void 0 ? void 0 : product.slug}"`,
+                            title: `Tôi muốn xem chi tiết sản phẩm "${product === null || product === void 0 ? void 0 : product.title}"`,
+                            value: `Tôi muốn xem chi tiết sản phẩm "${product === null || product === void 0 ? void 0 : product.title}" có mã "${product === null || product === void 0 ? void 0 : product.slug}"`,
                         },
                         {
-                            title: `Sản phẩm "${product === null || product === void 0 ? void 0 : product.title}" có phải là bạn đang tìm kiếm?`,
-                            value: `Tôi muốn tìm sản phẩm "${product === null || product === void 0 ? void 0 : product.title}"`,
+                            title: `Tôi muốn tìm sản phẩm tương tự "${product === null || product === void 0 ? void 0 : product.title}"`,
+                            value: `Tôi muốn tìm sản phẩm tương tự "${product === null || product === void 0 ? void 0 : product.title}" có mã "${product === null || product === void 0 ? void 0 : product.slug}"`,
                         },
                         {
-                            title: `Bạn có muốn biết thêm thông tin về sản phẩm "${product === null || product === void 0 ? void 0 : product.title}" không?`,
-                            value: `Tôi muốn biết thêm thông tin về sản phẩm "${product === null || product === void 0 ? void 0 : product.title}"`,
+                            title: `Tôi muốn biết số lượng còn lại của sản phẩm "${product === null || product === void 0 ? void 0 : product.title}"`,
+                            value: `Tôi muốn biết số lượng còn lại của sản phẩm "${product === null || product === void 0 ? void 0 : product.title}" có mã "${product === null || product === void 0 ? void 0 : product.slug}"`,
                         },
                     ];
                     res.json({
@@ -62,6 +73,7 @@ const getTrackedList = function (req, res) {
                         message: "Success",
                         data: {
                             data: product,
+                            data_type: "product",
                             suggestions: list_suggestion,
                         },
                     });
@@ -86,7 +98,7 @@ const getTrackedList = function (req, res) {
                 code: 200,
                 message: "Success",
                 data: {
-                    data: {},
+                    data: null,
                     suggestions: list_suggestion_default,
                 },
             });

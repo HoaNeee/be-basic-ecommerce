@@ -10,6 +10,8 @@ import { groupByArray } from "../../../helpers/groupBy";
 import { MyRequest } from "../../middlewares/client/auth.middleware";
 import Blog from "../../models/blog.model";
 import User from "../../models/user.model";
+import { solvePriceStock } from "../../../utils/product";
+import Supplier from "../../models/supplier.model";
 
 const API_KEY = process.env.GOOGLE_GEM_AI_API_KEY;
 const DOMAIN =
@@ -42,10 +44,18 @@ export const getHistoryChat = async (req: Request, res: Response) => {
 
     const formattedChat = formattedChatHelper(chat);
 
+    req.session["show_suggestion_begin"] = true;
+    if (formattedChat.length > 0) {
+      req.session["show_suggestion_begin"] = false;
+    }
+
     res.json({
       code: 200,
       message: "Success",
-      data: formattedChat,
+      data: {
+        chats: formattedChat,
+        show_suggestion_begin: req.session["show_suggestion_begin"],
+      },
       chatNotFormat: chat,
     });
   } catch (error) {
@@ -186,8 +196,6 @@ const getIntent = async (
 
     const [categoriesMap, optionsMap] = await getCategoriesAndOptions();
 
-    // - "website_info": Thông tin về website
-
     const classicPrompt = `Bạn là một trợ lý ảo của một trang web bán hàng, người dùng gửi câu sau "${input}"
     
       Dữ liệu tham khảo cho việc phân tích intent:
@@ -251,8 +259,6 @@ const getIntent = async (
     const object = JSON.parse(output);
 
     console.log(object);
-
-    req.session["userState"] = object.userState;
 
     if (!object.new && object.intent === "search_product") {
       if (object.intent === "search_product") {
@@ -319,13 +325,23 @@ const promptProductDetail = async (
   chat: Chat,
   intent: string
 ) => {
+  const product = await getProductUsingInput(input);
+
   const prompt = `Bạn là một trợ lý ảo của trang web, dựa vào lịch sử trò chuyện cho việc thông tin chi tiết sản phẩm, hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng.
         - Người dùng gửi câu sau "${input}"
+        Dữ liệu tham khảo
+        - Cho việc phân tích sản phẩm (có thể không có): ${JSON.stringify(
+          product
+        )}
+        - Đây là domain của trang web: ${DOMAIN}
+        - Nếu không có dữ liệu sản phẩm ở phía trên thì hãy dựa vào lịch sử của đoạn chat để tìm kiếm thông tin sản phẩm.
+
         Yêu cầu:
         - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt nhé.
         - Hỏi xem người dùng có muốn qua trang chi tiết sản phẩm không.
-        - Bạn có thể đưa link chi tiết sản phẩm vào (nếu sử dụng thẻ a, hãy css cho nó đặc biệt chút), đây là domain của trang web: ${DOMAIN}, link chi tiết sản phẩm là: ${DOMAIN}/shop/slug-product
+        - Bạn có thể đưa link chi tiết sản phẩm vào (nếu sử dụng thẻ a, hãy thêm 1 chút css), link chi tiết sản phẩm là: ${DOMAIN}/shop/slug-product
         - Hỏi xem người dùng có muốn tự động chuyển hướng đến trang chi tiết sản phẩm không, nếu có hãy trả về thêm trường "auto_redirect": true, và "redirect_url": "${DOMAIN}/shop/slug-product", tôi sẽ tự re-direct người dùng đến trang chi tiết sản phẩm.
+        - Hãy nhớ luôn hỏi người dùng trước khi muốn tự động chuyển hướng, nếu người dùng khẳng định muốn tự động chuyển hướng thì hãy trả về trường auto_redirect là true và redirect_url là đường dẫn mà bạn muốn chuyển hướng.
         - Nếu người dùng xác nhận muốn tự động chuyển hướng thì hãy mô phỏng timeout 2 giây (css cho spin, hoặc bạn có thể làm gì đó) để tôi có thể tự động chuyển hướng đến trang chi tiết sản phẩm.
         - Trả lời đúng format dưới dạng JSON như sau: 
         {
@@ -367,8 +383,9 @@ const promptProduct = async (
     products
   )}, 
         - Hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng và cung cấp thông tin về sản phẩm này nhé.
-        - Dựa vào lịch sử trò chuyện + các input đã có của người dùng, hãy trả lời sao cho phù hợp, nối tiếp cuộc trò chuyện, ví dụ "tôi muốn một chiếc áo", input sau có thể là "Thêm màu đỏ", và có thể tiếp là: "Thêm kích thước L".
+        - Dựa vào lịch sử trò chuyện + các input đã có của người dùng, hãy trả lời sao cho phù hợp, nối tiếp cuộc trò chuyện, ví dụ "tôi muốn một chiếc áo", input sau có thể là "Thêm màu đỏ", và có thể tiếp là: "Thêm kích thước L", và cũng có thể là "sản phẩm tương tự".
         - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt.
+        - Dựa vào input khi người dùng muốn tìm sản phẩm tương tự, hãy trả lời sao cho hợp lý với sản phẩm đã tìm kiếm, ví dụ: "Đây là những sản phẩm tương tự với sản phẩm bạn đã đề cập".
         - Nếu là câu hỏi đầu tiên thì hãy bắt đầu với xin chào còn không thì không cần xin chào.
         - Nếu không có sản phẩm nào phù hợp hãy trả lời khéo và nói rằng không tìm thấy sản phẩm nào phù hợp với yêu cầu của người dùng.
         - Với response hãy trả về dưới dạng thẻ HTML, ví dụ: <p>Đây là sản phẩm phù hợp với yêu cầu của bạn, chúc bạn tìm được sản phẩm ưng ý nhé!</p>
@@ -658,7 +675,11 @@ const getBlogs = async (input: string) => {
 
 const getProductsWithFields = async (input: string, req: Request) => {
   try {
-    const [categoriesMap, optionsMap] = await getCategoriesAndOptions();
+    let [categoriesMap, optionsMap] = await getCategoriesAndOptions();
+
+    const product = await getProductUsingInput(input);
+
+    // - Nếu input đề cập đến sản phẩm tương tự, hãy sử dụng danh mục của sản phẩm sau: ${product?.categories}
 
     const prompt = `Bạn là một trợ lý ảo của một trang web bán hàng, nhiệm vụ của bạn là phân tích yêu cầu của người dùng và xuất ra dữ liệu có cấu trúc dạng JSON theo mẫu bên dưới. Không cần giải thích gì thêm.
 
@@ -698,6 +719,14 @@ const getProductsWithFields = async (input: string, req: Request) => {
     }
    
     `;
+
+    if (product) {
+      const object = {
+        categories: product.categories || [],
+        productType: "simple",
+      };
+      return await getproducts(object, req);
+    }
 
     const response = await gemAI.models.generateContent({
       model: "gemini-2.5-flash",
@@ -941,4 +970,31 @@ const handleProductVariations = async (
     console.error("Error variations product:", error);
     throw error;
   }
+};
+
+const getProductUsingInput = async (input: string) => {
+  const existSlug =
+    input.includes("mã") || input.includes("slug") || input.includes("id");
+  let product = null;
+  if (existSlug) {
+    let slug = input.substring(input.indexOf("mã") + 2).trim();
+    slug = slug.replace(/["']/g, "");
+    if (slug) {
+      product = await Product.findOne({ slug }).lean();
+    }
+  }
+
+  if (product && product.productType === "variations") {
+    const [subProducts, supplier] = await Promise.all([
+      SubProduct.find({ product_id: product._id, deleted: false }).lean(),
+      Supplier.findOne({ _id: product.supplier_id }).lean(),
+    ]);
+    if (subProducts && subProducts.length > 0) {
+      solvePriceStock(product, subProducts);
+    }
+    if (supplier) {
+      product.supplierName = supplier.name;
+    }
+  }
+  return product;
 };

@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 import Product from "../../models/product.model";
+import SubProduct from "../../models/subProduct.model";
+import { solvePriceStock } from "../../../utils/product";
 
 // [POST] /suggestions/track
 export const trackSuggestion = async function (req: Request, res: Response) {
@@ -30,19 +32,28 @@ export const getTrackedList = async function (req: Request, res: Response) {
         const product = await Product.findOne({
           _id: last_tracked.value,
           deleted: false,
-        });
+        }).lean();
+        if (product && product.productType === "variations") {
+          const subProducts = await SubProduct.find({
+            product_id: product._id,
+            deleted: false,
+          }).lean();
+          if (subProducts && subProducts.length > 0) {
+            solvePriceStock(product, subProducts);
+          }
+        }
         const list_suggestion = [
           {
-            title: `Bạn có muốn xem chi tiết sản phẩm "${product?.title}" không?`,
-            value: `Tôi muốn xem chi tiết sản phẩm "${product?.slug}"`,
+            title: `Tôi muốn xem chi tiết sản phẩm "${product?.title}"`,
+            value: `Tôi muốn xem chi tiết sản phẩm "${product?.title}" có mã "${product?.slug}"`,
           },
           {
-            title: `Sản phẩm "${product?.title}" có phải là bạn đang tìm kiếm?`,
-            value: `Tôi muốn tìm sản phẩm "${product?.title}"`,
+            title: `Tôi muốn tìm sản phẩm tương tự "${product?.title}"`,
+            value: `Tôi muốn tìm sản phẩm tương tự "${product?.title}" có mã "${product?.slug}"`,
           },
           {
-            title: `Bạn có muốn biết thêm thông tin về sản phẩm "${product?.title}" không?`,
-            value: `Tôi muốn biết thêm thông tin về sản phẩm "${product?.title}"`,
+            title: `Tôi muốn biết số lượng còn lại của sản phẩm "${product?.title}"`,
+            value: `Tôi muốn biết số lượng còn lại của sản phẩm "${product?.title}" có mã "${product?.slug}"`,
           },
         ];
         res.json({
@@ -50,6 +61,7 @@ export const getTrackedList = async function (req: Request, res: Response) {
           message: "Success",
           data: {
             data: product,
+            data_type: "product",
             suggestions: list_suggestion,
           },
         });
@@ -82,7 +94,7 @@ export const getTrackedList = async function (req: Request, res: Response) {
       code: 200,
       message: "Success",
       data: {
-        data: {},
+        data: null,
         suggestions: list_suggestion_default,
       },
     });

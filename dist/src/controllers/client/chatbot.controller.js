@@ -23,6 +23,8 @@ const subProductOption_model_1 = __importDefault(require("../../models/subProduc
 const groupBy_1 = require("../../../helpers/groupBy");
 const blog_model_1 = __importDefault(require("../../models/blog.model"));
 const user_model_1 = __importDefault(require("../../models/user.model"));
+const product_1 = require("../../../utils/product");
+const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
 const API_KEY = process.env.GOOGLE_GEM_AI_API_KEY;
 const DOMAIN = process.env.NODE_ENV === "production"
     ? "https://shop.kakrist.site"
@@ -34,10 +36,17 @@ const getHistoryChat = (req, res) => __awaiter(void 0, void 0, void 0, function*
     try {
         const chat = ((_a = chatHistory.get(req.session["sid"])) === null || _a === void 0 ? void 0 : _a.history) || [];
         const formattedChat = formattedChatHelper(chat);
+        req.session["show_suggestion_begin"] = true;
+        if (formattedChat.length > 0) {
+            req.session["show_suggestion_begin"] = false;
+        }
         res.json({
             code: 200,
             message: "Success",
-            data: formattedChat,
+            data: {
+                chats: formattedChat,
+                show_suggestion_begin: req.session["show_suggestion_begin"],
+            },
             chatNotFormat: chat,
         });
     }
@@ -209,7 +218,6 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
         const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);
         const object = JSON.parse(output);
         console.log(object);
-        req.session["userState"] = object.userState;
         if (!object.new && object.intent === "search_product") {
             if (object.intent === "search_product") {
                 const products = yield getproducts(object.query, req);
@@ -254,13 +262,20 @@ const messageTalk = (input, chat) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 const promptProductDetail = (req, res, input, chat, intent) => __awaiter(void 0, void 0, void 0, function* () {
+    const product = yield getProductUsingInput(input);
     const prompt = `Bạn là một trợ lý ảo của trang web, dựa vào lịch sử trò chuyện cho việc thông tin chi tiết sản phẩm, hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng.
         - Người dùng gửi câu sau "${input}"
+        Dữ liệu tham khảo
+        - Cho việc phân tích sản phẩm (có thể không có): ${JSON.stringify(product)}
+        - Đây là domain của trang web: ${DOMAIN}
+        - Nếu không có dữ liệu sản phẩm ở phía trên thì hãy dựa vào lịch sử của đoạn chat để tìm kiếm thông tin sản phẩm.
+
         Yêu cầu:
         - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt nhé.
         - Hỏi xem người dùng có muốn qua trang chi tiết sản phẩm không.
-        - Bạn có thể đưa link chi tiết sản phẩm vào (nếu sử dụng thẻ a, hãy css cho nó đặc biệt chút), đây là domain của trang web: ${DOMAIN}, link chi tiết sản phẩm là: ${DOMAIN}/shop/slug-product
+        - Bạn có thể đưa link chi tiết sản phẩm vào (nếu sử dụng thẻ a, hãy thêm 1 chút css), link chi tiết sản phẩm là: ${DOMAIN}/shop/slug-product
         - Hỏi xem người dùng có muốn tự động chuyển hướng đến trang chi tiết sản phẩm không, nếu có hãy trả về thêm trường "auto_redirect": true, và "redirect_url": "${DOMAIN}/shop/slug-product", tôi sẽ tự re-direct người dùng đến trang chi tiết sản phẩm.
+        - Hãy nhớ luôn hỏi người dùng trước khi muốn tự động chuyển hướng, nếu người dùng khẳng định muốn tự động chuyển hướng thì hãy trả về trường auto_redirect là true và redirect_url là đường dẫn mà bạn muốn chuyển hướng.
         - Nếu người dùng xác nhận muốn tự động chuyển hướng thì hãy mô phỏng timeout 2 giây (css cho spin, hoặc bạn có thể làm gì đó) để tôi có thể tự động chuyển hướng đến trang chi tiết sản phẩm.
         - Trả lời đúng format dưới dạng JSON như sau: 
         {
@@ -289,8 +304,9 @@ const promptProductDetail = (req, res, input, chat, intent) => __awaiter(void 0,
 const promptProduct = (req_1, res_1, input_1, chat_1, intent_1, ...args_1) => __awaiter(void 0, [req_1, res_1, input_1, chat_1, intent_1, ...args_1], void 0, function* (req, res, input, chat, intent, products = []) {
     const prompt = `Đây là danh sách sản phẩm dưới dạng JSON sau khi phân tích yêu cầu của người dùng "${input}": ${JSON.stringify(products)}, 
         - Hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng và cung cấp thông tin về sản phẩm này nhé.
-        - Dựa vào lịch sử trò chuyện + các input đã có của người dùng, hãy trả lời sao cho phù hợp, nối tiếp cuộc trò chuyện, ví dụ "tôi muốn một chiếc áo", input sau có thể là "Thêm màu đỏ", và có thể tiếp là: "Thêm kích thước L".
+        - Dựa vào lịch sử trò chuyện + các input đã có của người dùng, hãy trả lời sao cho phù hợp, nối tiếp cuộc trò chuyện, ví dụ "tôi muốn một chiếc áo", input sau có thể là "Thêm màu đỏ", và có thể tiếp là: "Thêm kích thước L", và cũng có thể là "sản phẩm tương tự".
         - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt.
+        - Dựa vào input khi người dùng muốn tìm sản phẩm tương tự, hãy trả lời sao cho hợp lý với sản phẩm đã tìm kiếm, ví dụ: "Đây là những sản phẩm tương tự với sản phẩm bạn đã đề cập".
         - Nếu là câu hỏi đầu tiên thì hãy bắt đầu với xin chào còn không thì không cần xin chào.
         - Nếu không có sản phẩm nào phù hợp hãy trả lời khéo và nói rằng không tìm thấy sản phẩm nào phù hợp với yêu cầu của người dùng.
         - Với response hãy trả về dưới dạng thẻ HTML, ví dụ: <p>Đây là sản phẩm phù hợp với yêu cầu của bạn, chúc bạn tìm được sản phẩm ưng ý nhé!</p>
@@ -521,7 +537,8 @@ const getBlogs = (input) => __awaiter(void 0, void 0, void 0, function* () {
 });
 const getProductsWithFields = (input, req) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const [categoriesMap, optionsMap] = yield getCategoriesAndOptions();
+        let [categoriesMap, optionsMap] = yield getCategoriesAndOptions();
+        const product = yield getProductUsingInput(input);
         const prompt = `Bạn là một trợ lý ảo của một trang web bán hàng, nhiệm vụ của bạn là phân tích yêu cầu của người dùng và xuất ra dữ liệu có cấu trúc dạng JSON theo mẫu bên dưới. Không cần giải thích gì thêm.
 
     Người dùng hỏi: "${input}"
@@ -560,6 +577,13 @@ const getProductsWithFields = (input, req) => __awaiter(void 0, void 0, void 0, 
     }
    
     `;
+        if (product) {
+            const object = {
+                categories: product.categories || [],
+                productType: "simple",
+            };
+            return yield getproducts(object, req);
+        }
         const response = yield gemAI.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
@@ -760,4 +784,28 @@ const handleProductVariations = (find, object, req) => __awaiter(void 0, void 0,
         console.error("Error variations product:", error);
         throw error;
     }
+});
+const getProductUsingInput = (input) => __awaiter(void 0, void 0, void 0, function* () {
+    const existSlug = input.includes("mã") || input.includes("slug") || input.includes("id");
+    let product = null;
+    if (existSlug) {
+        let slug = input.substring(input.indexOf("mã") + 2).trim();
+        slug = slug.replace(/["']/g, "");
+        if (slug) {
+            product = yield product_model_1.default.findOne({ slug }).lean();
+        }
+    }
+    if (product && product.productType === "variations") {
+        const [subProducts, supplier] = yield Promise.all([
+            subProduct_model_1.default.find({ product_id: product._id, deleted: false }).lean(),
+            supplier_model_1.default.findOne({ _id: product.supplier_id }).lean(),
+        ]);
+        if (subProducts && subProducts.length > 0) {
+            (0, product_1.solvePriceStock)(product, subProducts);
+        }
+        if (supplier) {
+            product.supplierName = supplier.name;
+        }
+    }
+    return product;
 });
