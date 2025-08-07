@@ -83,6 +83,50 @@ export const chatBot = async (req: MyRequest, res: Response) => {
       req.body.message ||
       `Xin chào, bạn thế nào? Chúng ta có thể nói chuyện không!`;
 
+    if (!input || input.trim() === "") {
+      res.status(400).json({
+        code: 400,
+        message: "Input message is required and cannot be empty.",
+      });
+      return;
+    }
+
+    const action = req.body.action || "ask";
+
+    if (action === "suggest") {
+      const type = req.body.type;
+      if (type === "search_product") {
+        return await promptProduct(req, res, input, chat, type);
+      }
+      const product = await getProductUsingInput(input);
+
+      if (!product) {
+        res.json({
+          code: 404,
+          message: "Product not found",
+        });
+        return;
+      }
+
+      if (type === "similar_product") {
+        const object = {
+          categories: product.categories || [],
+          productType: "simple",
+        };
+        const similar_products = await getproducts(object, req);
+
+        return await promptProduct(
+          req,
+          res,
+          input,
+          chat,
+          type,
+          similar_products
+        );
+      }
+      return await promptProductDetail(req, res, input, chat, type, product);
+    }
+
     const intent = await getIntent(input, req, res, chat);
     console.log("intent", intent);
 
@@ -283,49 +327,17 @@ const getIntent = async (
   }
 };
 
-const messageTalk = async (input: string, chat: Chat) => {
-  try {
-    const prompt = `Bạn là một trợ lý ảo của một trang web bán hàng và là một người bạn siêu hiểu biết, hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng. 
-    - Người dùng gửi câu sau "${input}"
-
-    - Yêu cầu: 
-    - Trả message về dưới dạng thẻ HTML, ví dụ: <p>Tôi khỏe, còn bạn</p>.
-    - Hãy hạn chế sử dụng từ "Xin chào" trong câu trả lời, chỉ sử dụng khi người dùng hỏi về sức khỏe hoặc muốn bắt đầu cuộc trò chuyện.
-    - Nếu người dùng muốn trò chuyện, hãy hỗ trợ họ một cách tự nhiên và thân thiện.
-    - Hãy linh hoạt trong việc trả lời, không cần phải quá nghiêm túc, hãy tạo cảm giác thoải mái cho người dùng.
-    - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt nhé.
-    - Trả kết quả dưới dạng JSON như sau:
-    {
-      "intent": "small_talk",
-      "response": "<p>Tôi khỏe, còn bạn</p>"
-    }
-
-    `;
-
-    const response = await chat.sendMessage({
-      message: prompt,
-    });
-
-    const output = response.text.slice(
-      response.text.indexOf("{"),
-      response.text.lastIndexOf("}") + 1
-    );
-
-    return JSON.parse(output).response;
-  } catch (error) {
-    console.error("Error occurred while talking message:", error);
-    throw error;
-  }
-};
-
 const promptProductDetail = async (
   req: Request,
   res: Response,
   input: string,
   chat: Chat,
-  intent: string
+  intent: string,
+  product?: any
 ) => {
-  const product = await getProductUsingInput(input);
+  if (!product) {
+    product = await getProductUsingInput(input);
+  }
 
   const prompt = `Bạn là một trợ lý ảo của trang web, dựa vào lịch sử trò chuyện cho việc thông tin chi tiết sản phẩm, hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng.
         - Người dùng gửi câu sau "${input}"
@@ -417,92 +429,6 @@ const promptProduct = async (
   });
 };
 
-const promptGuideWebsite = async (
-  req: MyRequest,
-  res: Response,
-  input: string,
-  chat: Chat
-) => {
-  try {
-    const publicRoute = [
-      "/",
-      "/shop",
-      "/blogs",
-      "/contact",
-      "/stories",
-      "/auth/login",
-      "/auth/register",
-      "/search",
-    ];
-    const privateRoute = [
-      "/cart",
-      "/cart/checkout",
-      "/profile",
-      "/profile/wishlists",
-      "/profile/address",
-      "/profile/notifications",
-      "/profile/orders",
-      "/profile/settings",
-      "/profile/blog-saved",
-    ];
-
-    const prompt = `Bạn là một trợ lý ảo của trang web bán hàng, nhiệm vụ của bạn là hướng dẫn người dùng cách sử dụng trang web này.
-    - Người dùng hỏi: "${input}"
-    - Đây là domain của trang web: ${DOMAIN}
-    - Danh sách các đường dẫn công khai: ${publicRoute.join(", ")}
-    - Danh sách các đường dẫn riêng tư: ${privateRoute.join(", ")}
-    - Các mục cá nhân hóa ở route "/profile", cài đặt như chỉnh thông báo, theme, ngôn ngữ ở route "/profile/settings"
-    - Để check user login hay chưa hãy sử dụng userId: ${
-      req.userId
-    }, nếu trống thì là chưa login, ngược lại là đã login.
-    - Hãy nhớ rằng bạn chỉ xuất hiện ở trang chủ ("/"), các trang khác tôi chưa có update để bạn có thể xuất hiện, nên bạn hãy hướng dẫn thân thiện và tự nhiên nhé.
-    - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt.
-
-    Yêu cầu:
-    - Phân tích yêu cầu của người dùng và cung cấp hướng dẫn chi tiết về cách sử dụng trang web.
-    - Đảm bảo rằng các đường dẫn được đề cập ở trên được sử dụng đúng cách trong hướng dẫn.
-    - Nếu người dùng hỏi về các route private, hãy check xem đã login hay chưa, nếu chưa thì hãy trả lời rằng bạn cần đăng nhập để sử dụng các chức năng này.
-    - Đừng cố gắng đề cập đến các route private nếu người dùng chưa đăng nhập, hãy hướng dẫn họ đăng nhập trước.
-    - Response của bạn nên bao gồm các thẻ HTML để định dạng văn bản, ví dụ: <p>Hướng dẫn sử dụng trang web...</p>.
-    - Hãy mô tả đường dẫn như 1 breedcrumb, ví dụ: "Để truy cập trang chủ, bạn có thể vào <a href='${DOMAIN}'>Trang chủ</a> hoặc để xem sản phẩm, hãy vào <a href='${DOMAIN}/shop'>Cửa hàng</a>."
-    - Hỏi xem người dùng có muốn tự động chuyển hướng đến trang chủ không, nếu có hãy trả về thêm trường "auto_redirect": true, và "redirect_url": "${DOMAIN}/something-url", tôi sẽ tự re-direct người dùng đến trang đó.
-    - Nhớ là hỏi trước ý định của người dùng có muốn tự động chuyển hướng hay không, nếu có thì mới trả về trường auto_redirect và redirect_url.
-    - Nếu người dùng nhắn thẳng, khẳng định muốn tự động chuyển hướng luôn mà chưa cần hỏi thì hãy trả về trường auto_redirect là true và redirect_url là đường dẫn mà bạn muốn chuyển hướng.
-    - Nếu người dùng xác nhận muốn tự động chuyển hướng thì hãy mô phỏng delay 3 giây (css cho spin, hoặc bạn có thể làm gì đó) để tôi có thể tự động chuyển hướng.
-    - Nếu dùng thẻ a, hãy thêm một chút css cho nó.
-    - Trả lời dưới dạng JSON với cấu trúc như sau:
-    {
-      "intent": "guide_website",
-      "response": "<p>Hướng dẫn sử dụng trang web...</p>"
-      "auto_redirect": false,
-      "redirect_url": "${DOMAIN}/profile/settings"
-    }
-    `;
-
-    const response = await chat.sendMessage({
-      message: prompt,
-    });
-    const output = response.text.slice(
-      response.text.indexOf("{"),
-      response.text.lastIndexOf("}") + 1
-    );
-    const data = JSON.parse(output);
-    res.json({
-      code: 200,
-      message: "Chatbot response",
-      data: {
-        intent: data.intent || "guide_website",
-        response: data.response,
-        auto_redirect: data.auto_redirect || false,
-        redirect_url: data.redirect_url || `${DOMAIN}`,
-      },
-    });
-  } catch (error) {
-    console.error("Error in promptGuideWebsite:", error);
-    throw error;
-  }
-};
-
 const promptBlog = async (
   req: Request,
   res: Response,
@@ -552,41 +478,6 @@ const promptBlog = async (
       data: blogs,
     },
   });
-};
-
-const formattedChatHelper = (chatHistory: any[]) => {
-  const formattedChat = chatHistory.slice(2).map((msg: any) => {
-    const message = msg.parts[0].text as string;
-    if (msg.role === "user") {
-      return {
-        role: "user",
-        content: message.slice(
-          message.indexOf('"') + 1,
-          message.indexOf('"', message.indexOf('"') + 1)
-        ),
-      };
-    }
-    const indexIntent = message.indexOf("intent");
-    if (indexIntent !== -1) {
-      const mess = message.slice(
-        message.indexOf("{"),
-        message.lastIndexOf("}") + 1
-      );
-      const inObj = JSON.parse(mess);
-      return {
-        role: msg.role,
-        intent: inObj.intent,
-        content: inObj.response || "No response",
-        data: inObj.data || [],
-      };
-    }
-    return {
-      role: msg.role,
-      intent: "small_talk",
-      content: message,
-    };
-  });
-  return formattedChat;
 };
 
 const getBlogs = async (input: string) => {
@@ -677,10 +568,6 @@ const getProductsWithFields = async (input: string, req: Request) => {
   try {
     let [categoriesMap, optionsMap] = await getCategoriesAndOptions();
 
-    const product = await getProductUsingInput(input);
-
-    // - Nếu input đề cập đến sản phẩm tương tự, hãy sử dụng danh mục của sản phẩm sau: ${product?.categories}
-
     const prompt = `Bạn là một trợ lý ảo của một trang web bán hàng, nhiệm vụ của bạn là phân tích yêu cầu của người dùng và xuất ra dữ liệu có cấu trúc dạng JSON theo mẫu bên dưới. Không cần giải thích gì thêm.
 
     Người dùng hỏi: "${input}"
@@ -719,14 +606,6 @@ const getProductsWithFields = async (input: string, req: Request) => {
     }
    
     `;
-
-    if (product) {
-      const object = {
-        categories: product.categories || [],
-        productType: "simple",
-      };
-      return await getproducts(object, req);
-    }
 
     const response = await gemAI.models.generateContent({
       model: "gemini-2.5-flash",
@@ -997,4 +876,161 @@ const getProductUsingInput = async (input: string) => {
     }
   }
   return product;
+};
+
+//
+const formattedChatHelper = (chatHistory: any[]) => {
+  const formattedChat = chatHistory.slice(2).map((msg: any) => {
+    const message = msg.parts[0].text as string;
+    if (msg.role === "user") {
+      return {
+        role: "user",
+        content: message.slice(
+          message.indexOf('"') + 1,
+          message.indexOf('"', message.indexOf('"') + 1)
+        ),
+      };
+    }
+    const indexIntent = message.indexOf("intent");
+    if (indexIntent !== -1) {
+      const mess = message.slice(
+        message.indexOf("{"),
+        message.lastIndexOf("}") + 1
+      );
+      const inObj = JSON.parse(mess);
+      return {
+        role: msg.role,
+        intent: inObj.intent,
+        content: inObj.response || "No response",
+        data: inObj.data || [],
+      };
+    }
+    return {
+      role: msg.role,
+      intent: "small_talk",
+      content: message,
+    };
+  });
+  return formattedChat;
+};
+
+const promptGuideWebsite = async (
+  req: MyRequest,
+  res: Response,
+  input: string,
+  chat: Chat
+) => {
+  try {
+    const publicRoute = [
+      "/",
+      "/shop",
+      "/blogs",
+      "/contact",
+      "/stories",
+      "/auth/login",
+      "/auth/register",
+      "/search",
+    ];
+    const privateRoute = [
+      "/cart",
+      "/cart/checkout",
+      "/profile",
+      "/profile/wishlists",
+      "/profile/address",
+      "/profile/notifications",
+      "/profile/orders",
+      "/profile/settings",
+      "/profile/blog-saved",
+    ];
+
+    const prompt = `Bạn là một trợ lý ảo của trang web bán hàng, nhiệm vụ của bạn là hướng dẫn người dùng cách sử dụng trang web này.
+    - Người dùng hỏi: "${input}"
+    - Đây là domain của trang web: ${DOMAIN}
+    - Danh sách các đường dẫn công khai: ${publicRoute.join(", ")}
+    - Danh sách các đường dẫn riêng tư: ${privateRoute.join(", ")}
+    - Các mục cá nhân hóa ở route "/profile", cài đặt như chỉnh thông báo, theme, ngôn ngữ ở route "/profile/settings"
+    - Để check user login hay chưa hãy sử dụng userId: ${
+      req.userId
+    }, nếu trống thì là chưa login, ngược lại là đã login.
+    - Hãy nhớ rằng bạn chỉ xuất hiện ở trang chủ ("/"), các trang khác tôi chưa có update để bạn có thể xuất hiện, nên bạn hãy hướng dẫn thân thiện và tự nhiên nhé.
+    - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt.
+
+    Yêu cầu:
+    - Phân tích yêu cầu của người dùng và cung cấp hướng dẫn chi tiết về cách sử dụng trang web.
+    - Đảm bảo rằng các đường dẫn được đề cập ở trên được sử dụng đúng cách trong hướng dẫn.
+    - Nếu người dùng hỏi về các route private, hãy check xem đã login hay chưa, nếu chưa thì hãy trả lời rằng bạn cần đăng nhập để sử dụng các chức năng này.
+    - Đừng cố gắng đề cập đến các route private nếu người dùng chưa đăng nhập, hãy hướng dẫn họ đăng nhập trước.
+    - Response của bạn nên bao gồm các thẻ HTML để định dạng văn bản, ví dụ: <p>Hướng dẫn sử dụng trang web...</p>.
+    - Hãy mô tả đường dẫn như 1 breedcrumb, ví dụ: "Để truy cập trang chủ, bạn có thể vào <a href='${DOMAIN}'>Trang chủ</a> hoặc để xem sản phẩm, hãy vào <a href='${DOMAIN}/shop'>Cửa hàng</a>."
+    - Hỏi xem người dùng có muốn tự động chuyển hướng đến trang chủ không, nếu có hãy trả về thêm trường "auto_redirect": true, và "redirect_url": "${DOMAIN}/something-url", tôi sẽ tự re-direct người dùng đến trang đó.
+    - Nhớ là hỏi trước ý định của người dùng có muốn tự động chuyển hướng hay không, nếu có thì mới trả về trường auto_redirect và redirect_url.
+    - Nếu người dùng nhắn thẳng, khẳng định muốn tự động chuyển hướng luôn mà chưa cần hỏi thì hãy trả về trường auto_redirect là true và redirect_url là đường dẫn mà bạn muốn chuyển hướng.
+    - Nếu người dùng xác nhận muốn tự động chuyển hướng thì hãy mô phỏng delay 3 giây (css cho spin, hoặc bạn có thể làm gì đó) để tôi có thể tự động chuyển hướng.
+    - Nếu dùng thẻ a, hãy thêm một chút css cho nó.
+    - Trả lời dưới dạng JSON với cấu trúc như sau:
+    {
+      "intent": "guide_website",
+      "response": "<p>Hướng dẫn sử dụng trang web...</p>"
+      "auto_redirect": false,
+      "redirect_url": "${DOMAIN}/profile/settings"
+    }
+    `;
+
+    const response = await chat.sendMessage({
+      message: prompt,
+    });
+    const output = response.text.slice(
+      response.text.indexOf("{"),
+      response.text.lastIndexOf("}") + 1
+    );
+    const data = JSON.parse(output);
+    res.json({
+      code: 200,
+      message: "Chatbot response",
+      data: {
+        intent: data.intent || "guide_website",
+        response: data.response,
+        auto_redirect: data.auto_redirect || false,
+        redirect_url: data.redirect_url || `${DOMAIN}`,
+      },
+    });
+  } catch (error) {
+    console.error("Error in promptGuideWebsite:", error);
+    throw error;
+  }
+};
+
+const messageTalk = async (input: string, chat: Chat) => {
+  try {
+    const prompt = `Bạn là một trợ lý ảo của một trang web bán hàng và là một người bạn siêu hiểu biết, hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng. 
+    - Người dùng gửi câu sau "${input}"
+
+    - Yêu cầu: 
+    - Trả message về dưới dạng thẻ HTML, ví dụ: <p>Tôi khỏe, còn bạn</p>.
+    - Hãy hạn chế sử dụng từ "Xin chào" trong câu trả lời, chỉ sử dụng khi người dùng hỏi về sức khỏe hoặc muốn bắt đầu cuộc trò chuyện.
+    - Nếu người dùng muốn trò chuyện, hãy hỗ trợ họ một cách tự nhiên và thân thiện.
+    - Hãy linh hoạt trong việc trả lời, không cần phải quá nghiêm túc, hãy tạo cảm giác thoải mái cho người dùng.
+    - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt nhé.
+    - Trả kết quả dưới dạng JSON như sau:
+    {
+      "intent": "small_talk",
+      "response": "<p>Tôi khỏe, còn bạn</p>"
+    }
+
+    `;
+
+    const response = await chat.sendMessage({
+      message: prompt,
+    });
+
+    const output = response.text.slice(
+      response.text.indexOf("{"),
+      response.text.lastIndexOf("}") + 1
+    );
+
+    return JSON.parse(output).response;
+  } catch (error) {
+    console.error("Error occurred while talking message:", error);
+    throw error;
+  }
 };

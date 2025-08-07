@@ -481,7 +481,7 @@ const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function*
     <p>If you did not request this, please ignore this email.</p>
     <p>Thank you!</p>
     `;
-        (0, sendMail_1.sendMail)(email, subject, html);
+        (0, sendMail_1.sendMail)(email, subject, html, req);
         res.json({
             code: 200,
             message: "Check email success!",
@@ -538,7 +538,7 @@ const verifyOTP = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     <p>If you did not request this change, please contact support immediately.</p>
     <p>Thank you!</p>
     `;
-        (0, sendMail_1.sendMail)(email, subject, html);
+        (0, sendMail_1.sendMail)(email, subject, html, req);
         res.json({
             code: 200,
             message: "Verify OTP success!",

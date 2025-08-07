@@ -5,6 +5,7 @@ import cors from "cors";
 import AdminRoute from "./src/routes/admin/index.route";
 import ClientRoute from "./src/routes/client/index.route";
 import NotificationRoute from "./src/routes/notification.route";
+import SettingRoute from "./src/routes/setting.route";
 import cookieParser from "cookie-parser";
 import http from "node:http";
 import { Server } from "socket.io";
@@ -15,7 +16,7 @@ import MongoStore from "connect-mongo";
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000,
+  max: 2000,
   message: "Too many requests from this IP, please try again later.",
   standardHeaders: true,
   legacyHeaders: false,
@@ -86,6 +87,7 @@ app.use(limiter);
 ClientRoute(app);
 AdminRoute(app);
 NotificationRoute(app);
+SettingRoute(app);
 
 socket.connect(io);
 

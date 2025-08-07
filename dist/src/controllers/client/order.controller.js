@@ -22,7 +22,7 @@ const customer_model_1 = __importDefault(require("../../models/customer.model"))
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const socket_1 = require("../../../socket");
 const promotion_model_1 = __importDefault(require("../../models/promotion.model"));
-const templateHtml = (order) => {
+const templateHtml = (order, req) => {
     const subTotal = order.products.reduce((val, item) => val + item.quantity * item.price, 0);
     return `
     <!DOCTYPE html>
@@ -92,13 +92,13 @@ const templateHtml = (order) => {
 
           <p>
               Bạn có thể xem chi tiết đơn hàng tại:
-              <a href="https://shop.kakrist.site${order.link}">Xem đơn hàng</a>.
+              <a href="https://${req.setting.subdomain.find((item) => item === "shop") || "shop"}.${req.setting.domain}${order.link}">Xem đơn hàng</a>.
           </p>
 
           <p>Xin cảm ơn bạn đã mua sắm cùng <strong>Kkrist</strong>!</p>
 
           <div>
-              <img src="https://res.cloudinary.com/dlogl1cn7/image/upload/v1752984530/logo_pztyyd.png"
+              <img src="${req.setting.logoLight}"
                   style="height: 60px; width: 80px; object-fit: contain;" alt="">
           </div>
 
@@ -239,7 +239,7 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     code: (_c = order.promotion) === null || _c === void 0 ? void 0 : _c.code,
                 }
                 : null,
-        });
+        }, req);
         const io = (0, socket_1.getIo)();
         const notify1 = new notification_model_1.default({
             user_id: order.user_id,
@@ -253,7 +253,7 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
         if (customer) {
             if (customer.setting.emailNotification || !customer.setting) {
-                (0, sendMail_1.sendMail)(customer.email, "Đặt hàng thành công", html);
+                (0, sendMail_1.sendMail)(customer.email, "Đặt hàng thành công", html, req);
             }
             if (customer.setting.notification || !customer.setting) {
                 io.emit("SERVER_RETURN_USER_PLACED_ORDER", {

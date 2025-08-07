@@ -16,11 +16,6 @@ const schema = new Schema(
       unique: true,
     },
     price: Number,
-    // SKU: {
-    //   type: String,
-    //   index: true,
-    //   unique: true
-    // },
     SKU: {
       type: String,
       index: true,
@@ -36,7 +31,11 @@ const schema = new Schema(
     thumbnail: String,
     images: [String],
     supplier_id: String,
-    status: String,
+    status: {
+      type: String,
+      default: "active",
+      enum: ["active", "inactive"],
+    },
     deleted: {
       type: Boolean,
       default: false,

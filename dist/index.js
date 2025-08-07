@@ -43,6 +43,7 @@ const cors_1 = __importDefault(require("cors"));
 const index_route_1 = __importDefault(require("./src/routes/admin/index.route"));
 const index_route_2 = __importDefault(require("./src/routes/client/index.route"));
 const notification_route_1 = __importDefault(require("./src/routes/notification.route"));
+const setting_route_1 = __importDefault(require("./src/routes/setting.route"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const node_http_1 = __importDefault(require("node:http"));
 const socket_io_1 = require("socket.io");
@@ -52,7 +53,7 @@ const express_rate_limit_1 = require("express-rate-limit");
 const connect_mongo_1 = __importDefault(require("connect-mongo"));
 const limiter = (0, express_rate_limit_1.rateLimit)({
     windowMs: 15 * 60 * 1000,
-    max: 1000,
+    max: 2000,
     message: "Too many requests from this IP, please try again later.",
     standardHeaders: true,
     legacyHeaders: false,
@@ -108,6 +109,7 @@ app.use(limiter);
 (0, index_route_2.default)(app);
 (0, index_route_1.default)(app);
 (0, notification_route_1.default)(app);
+(0, setting_route_1.default)(app);
 socket.connect(io);
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {

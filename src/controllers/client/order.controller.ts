@@ -25,7 +25,7 @@ interface TemplateHTMLOrder {
   };
 }
 
-const templateHtml = (order: TemplateHTMLOrder) => {
+const templateHtml = (order: TemplateHTMLOrder, req: MyRequest) => {
   const subTotal = order.products.reduce(
     (val, item) => val + item.quantity * item.price,
     0
@@ -105,13 +105,15 @@ const templateHtml = (order: TemplateHTMLOrder) => {
 
           <p>
               Bạn có thể xem chi tiết đơn hàng tại:
-              <a href="https://shop.kakrist.site${order.link}">Xem đơn hàng</a>.
+              <a href="https://${
+                req.setting.subdomain.find((item) => item === "shop") || "shop"
+              }.${req.setting.domain}${order.link}">Xem đơn hàng</a>.
           </p>
 
           <p>Xin cảm ơn bạn đã mua sắm cùng <strong>Kkrist</strong>!</p>
 
           <div>
-              <img src="https://res.cloudinary.com/dlogl1cn7/image/upload/v1752984530/logo_pztyyd.png"
+              <img src="${req.setting.logoLight}"
                   style="height: 60px; width: 80px; object-fit: contain;" alt="">
           </div>
 
@@ -276,22 +278,25 @@ export const create = async (req: MyRequest, res: Response) => {
     //send mail
     const customer = await Customer.findOne({ _id: user_id });
 
-    const html = templateHtml({
-      orderNo: order.orderNo,
-      link: `/profile/orders?order_no=${order.orderNo}`,
-      total: order.totalPrice.toLocaleString(),
-      products: order.products,
-      cusName: `${customer.firstName || "User"} ${customer.lastName || ""}`,
-      createdAt: order.createdAt.toLocaleString(),
-      status: order.status,
-      promotion: order.promotion
-        ? {
-            promotionType: order.promotion?.promotionType,
-            value: order.promotion?.value,
-            code: order.promotion?.code,
-          }
-        : null,
-    });
+    const html = templateHtml(
+      {
+        orderNo: order.orderNo,
+        link: `/profile/orders?order_no=${order.orderNo}`,
+        total: order.totalPrice.toLocaleString(),
+        products: order.products,
+        cusName: `${customer.firstName || "User"} ${customer.lastName || ""}`,
+        createdAt: order.createdAt.toLocaleString(),
+        status: order.status,
+        promotion: order.promotion
+          ? {
+              promotionType: order.promotion?.promotionType,
+              value: order.promotion?.value,
+              code: order.promotion?.code,
+            }
+          : null,
+      },
+      req
+    );
 
     // check setting
 
@@ -310,7 +315,7 @@ export const create = async (req: MyRequest, res: Response) => {
 
     if (customer) {
       if (customer.setting.emailNotification || !customer.setting) {
-        sendMail(customer.email, "Đặt hàng thành công", html);
+        sendMail(customer.email, "Đặt hàng thành công", html, req);
       }
       if (customer.setting.notification || !customer.setting) {
         io.emit("SERVER_RETURN_USER_PLACED_ORDER", {

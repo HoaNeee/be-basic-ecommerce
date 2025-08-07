@@ -100,7 +100,6 @@ export const create = async (req: MyRequest, res: Response) => {
   try {
     const { title, excerpt, content, image, tags, readTime, status } = req.body;
 
-    // Get user_id from auth middleware
     const user_id = req.userId || "admin";
 
     const blogData = {
@@ -293,12 +292,6 @@ export const changeMulti = async (req: MyRequest, res: Response) => {
   }
 };
 
-function calculateReadTime(content: string): number {
-  const wordsPerMinute = 200;
-  const words = content.split(/\s+/).length;
-  return Math.ceil(words / wordsPerMinute);
-}
-
 // [DELETE] /admin/blogs/tags/:tag
 export const removeTag = async (req: Request, res: Response) => {
   try {
@@ -333,3 +326,9 @@ export const removeTag = async (req: Request, res: Response) => {
     });
   }
 };
+
+function calculateReadTime(content: string): number {
+  const wordsPerMinute = 200;
+  const words = content.split(/\s+/).length;
+  return Math.ceil(words / wordsPerMinute);
+}

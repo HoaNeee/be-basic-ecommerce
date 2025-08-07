@@ -54,7 +54,9 @@ const search_route_1 = __importDefault(require("./search.route"));
 const transaction_route_1 = __importDefault(require("./transaction.route"));
 const chatbot_route_1 = __importDefault(require("./chatbot.route"));
 const suggestion_route_1 = __importDefault(require("./suggestion.route"));
+const settingMiddleware = __importStar(require("../../middlewares/setting.middleware"));
 const ClientRoute = (app) => {
+    app.use(settingMiddleware.setting);
     app.use("/auth", auth_route_1.default);
     app.use("/categories", category_route_1.default);
     app.use("/promotions", promotion_route_1.default);

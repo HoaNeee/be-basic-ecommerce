@@ -480,7 +480,7 @@ export const googleLogin = async (req: Request, res: Response) => {
 };
 
 // [POST] /auth/forgot-password
-export const forgotPassword = async (req: Request, res: Response) => {
+export const forgotPassword = async (req: MyRequest, res: Response) => {
   try {
     const email = req.body.email;
 
@@ -540,7 +540,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
     <p>If you did not request this, please ignore this email.</p>
     <p>Thank you!</p>
     `;
-    sendMail(email, subject, html);
+    sendMail(email, subject, html, req);
 
     res.json({
       code: 200,
@@ -559,7 +559,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
 };
 
 // [POST] /auth/forgot-password/verify-otp
-export const verifyOTP = async (req: Request, res: Response) => {
+export const verifyOTP = async (req: MyRequest, res: Response) => {
   try {
     const email = req.body.email;
 
@@ -609,7 +609,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
     <p>If you did not request this change, please contact support immediately.</p>
     <p>Thank you!</p>
     `;
-    sendMail(email, subject, html);
+    sendMail(email, subject, html, req);
 
     res.json({
       code: 200,

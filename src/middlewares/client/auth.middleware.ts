@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { clearCookie } from "../../controllers/client/auth.controller";
+import { Setting } from "../../types/setting.types";
 
 export interface MyRequest extends Request {
   userId: string;
+  setting?: Setting;
 }
 
 export const isAccess = async (

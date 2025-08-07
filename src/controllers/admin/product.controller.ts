@@ -295,7 +295,7 @@ export const create = async (req: Request, res: Response) => {
         const exist = existSkus.find((it) => it.SKU === subProduct.SKU);
         if (exist || !subProduct.SKU) {
           message = "Create new success, but some SKU already exist!!";
-          exist.SKU = `KAKRIST-SKU-${new Date().getTime()}`;
+          subProduct.SKU = `KAKRIST-SKU-${new Date().getTime()}`;
         }
       }
     }

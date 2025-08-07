@@ -17,8 +17,11 @@ import searchRouter from "./search.route";
 import transactionRouter from "./transaction.route";
 import chatBotRouter from "./chatbot.route";
 import suggestRouter from "./suggestion.route";
+import * as settingMiddleware from "../../middlewares/setting.middleware";
 
 const ClientRoute = (app: Express) => {
+  app.use(settingMiddleware.setting);
+
   app.use("/auth", authRouter);
   app.use("/categories", categoryRouter);
   app.use("/promotions", promotionRouter);

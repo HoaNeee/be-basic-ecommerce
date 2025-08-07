@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import { Setting } from "../../types/setting.types";
 
 export interface MyRequest extends Request {
   userId: string;
+  setting?: Setting;
 }
 
 export const isAccess = async (

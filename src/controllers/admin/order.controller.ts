@@ -8,7 +8,6 @@ import { getDataChartHelper } from "./purchase.controller";
 import Customer from "../../models/customer.model";
 import { MyRequest } from "../../middlewares/admin/auth.middleware";
 import { statusOrder, updateStockWhenOrder } from "../../../utils/order";
-import { sendMail } from "../../../helpers/sendMail";
 import Notification from "../../models/notification.model";
 import Product from "../../models/product.model";
 import SubProduct from "../../models/subProduct.model";

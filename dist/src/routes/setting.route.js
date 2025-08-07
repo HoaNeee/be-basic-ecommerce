@@ -32,58 +32,14 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-const mongoose_1 = __importStar(require("mongoose"));
-const mongoose_slug_updater_1 = __importDefault(require("mongoose-slug-updater"));
-mongoose_1.default.plugin(mongoose_slug_updater_1.default);
-const schema = new mongoose_1.Schema({
-    title: String,
-    content: String,
-    shortDescription: String,
-    categories: {
-        type: [String],
-    },
-    slug: {
-        type: String,
-        slug: "title",
-        unique: true,
-    },
-    price: Number,
-    SKU: {
-        type: String,
-        index: true,
-    },
-    stock: Number,
-    discountedPrice: Number,
-    cost: Number,
-    productType: {
-        type: String,
-        default: "simple",
-        enum: ["simple", "variations"],
-    },
-    thumbnail: String,
-    images: [String],
-    supplier_id: String,
-    status: {
-        type: String,
-        default: "active",
-        enum: ["active", "inactive"],
-    },
-    deleted: {
-        type: Boolean,
-        default: false,
-    },
-    deletedAt: Date,
-}, { timestamps: true });
-schema.index({
-    title: "text",
-    content: "text",
-    shortDescription: "text",
-    categories: "text",
-    SKU: "text",
-});
-const Product = mongoose_1.default.model("Product", schema, "products");
-exports.default = Product;
+const controller = __importStar(require("../controllers/setting.controller"));
+const authMiddleware = __importStar(require("../middlewares/admin/auth.middleware"));
+const route = (app) => {
+    app.patch("/admin/settings", authMiddleware.isAccess, controller.changeSetting);
+    app.get("/admin/settings", authMiddleware.isAccess, controller.getSetting);
+    app.post("/admin/settings/create-subdomain", authMiddleware.isAccess, controller.createSubdomain);
+    app.delete("/admin/settings/remove-subdomain", authMiddleware.isAccess, controller.removeSubdomain);
+    app.get("/settings", controller.getSettingClient);
+};
+exports.default = route;

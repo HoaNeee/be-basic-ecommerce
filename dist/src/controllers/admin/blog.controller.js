@@ -258,11 +258,6 @@ const changeMulti = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.changeMulti = changeMulti;
-function calculateReadTime(content) {
-    const wordsPerMinute = 200;
-    const words = content.split(/\s+/).length;
-    return Math.ceil(words / wordsPerMinute);
-}
 const removeTag = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { tag } = req.params;
@@ -293,3 +288,8 @@ const removeTag = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.removeTag = removeTag;
+function calculateReadTime(content) {
+    const wordsPerMinute = 200;
+    const words = content.split(/\s+/).length;
+    return Math.ceil(words / wordsPerMinute);
+}
