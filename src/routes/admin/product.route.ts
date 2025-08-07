@@ -3,9 +3,9 @@ import * as controller from "../../controllers/admin/product.controller";
 
 const router: Router = Router();
 
-router.get("/", controller.index);
+router.get("/", controller.products);
 router.post("/create", controller.create);
-router.get("/detail/:id", controller.detail);
+router.get("/detail/:id", controller.detail_v2);
 router.patch("/edit/:id", controller.edit);
 router.patch("/edit-sub-product/:id", controller.editSubProduct);
 router.get("/get-price", controller.getPriceProduct);

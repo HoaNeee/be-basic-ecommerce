@@ -87,6 +87,13 @@ const blogDetail = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             deleted: false,
             status: "published",
         }).lean();
+        if (!blog) {
+            res.status(404).json({
+                code: 404,
+                message: "Blog not found",
+            });
+            return;
+        }
         const author = yield user_model_1.default.findOne({
             _id: blog.user_id,
             deleted: false,

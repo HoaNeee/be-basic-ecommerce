@@ -43,7 +43,7 @@ const merge = (arr1: any[], arr2: any[]) => {
 };
 
 // [GET] /products
-export const index = async (req: Request, res: Response) => {
+export const products = async (req: Request, res: Response) => {
   try {
     let find: any = {
       deleted: false,
@@ -83,14 +83,19 @@ export const index = async (req: Request, res: Response) => {
       .limit(objectPagination.limitItems)
       .lean();
 
-    for (const pro of products) {
-      const subProducts = await SubProduct.find({
-        product_id: pro._id,
-        deleted: false,
-      });
+    const product_ids = products.map((item) => String(item._id));
+    const subProducts = await SubProduct.find({
+      product_id: { $in: product_ids },
+      deleted: false,
+    });
 
-      if (subProducts.length > 0) {
-        solvePriceStock(pro, subProducts);
+    for (const pro of products) {
+      const subs = subProducts.filter(
+        (item) => String(item.product_id) === String(pro._id)
+      );
+
+      if (subs.length > 0) {
+        solvePriceStock(pro, subs);
       }
     }
 
@@ -112,7 +117,7 @@ export const index = async (req: Request, res: Response) => {
 };
 
 // [GET] /products/detail/:id
-export const detail = async (req: Request, res: Response) => {
+export const detail_v2 = async (req: Request, res: Response) => {
   try {
     const product_id = req.params.id;
 
@@ -147,11 +152,34 @@ export const detail = async (req: Request, res: Response) => {
           subMap.set(String(item._id), { ...item });
         }
 
+        const sub_product_ids = subProducts.map((item) => String(item._id));
+        const sub_options = await SubProductOption.find({
+          deleted: false,
+          sub_product_id: { $in: sub_product_ids },
+        }).lean();
+
+        const option_ids = sub_options.map((item) =>
+          String(item.variation_option_id)
+        );
+
+        const variation_option_ids = await VariationOption.find({
+          _id: { $in: option_ids },
+          deleted: false,
+        });
+
+        const variation_ids = variation_option_ids.map((item) =>
+          String(item.variation_id)
+        );
+
+        const variationsData = await Variation.find({
+          _id: { $in: variation_ids },
+          deleted: false,
+        });
+
         for (const item of subProducts) {
-          const subProductOptions = await SubProductOption.find({
-            deleted: false,
-            sub_product_id: item._id,
-          }).lean();
+          const subProductOptions = sub_options.filter(
+            (opt) => String(opt.sub_product_id) === String(item._id)
+          );
 
           const options = [];
           if (subProductOptions.length === 0) {
@@ -160,10 +188,10 @@ export const detail = async (req: Request, res: Response) => {
             subMap.set(String(item._id), null);
           } else {
             for (const subOption of subProductOptions) {
-              const option = await VariationOption.findOne({
-                _id: subOption.variation_option_id,
-                deleted: false,
-              });
+              const option = variation_option_ids.find(
+                (opt) =>
+                  String(opt._id) === String(subOption.variation_option_id)
+              );
 
               if (option) {
                 options.push({
@@ -172,10 +200,9 @@ export const detail = async (req: Request, res: Response) => {
                   sub_product_id: item._id,
                 });
 
-                const variation = await Variation.findOne({
-                  _id: option.variation_id,
-                  deleted: false,
-                });
+                const variation = variationsData.find(
+                  (item) => item.id === option.variation_id
+                );
 
                 const index = variations.findIndex(
                   (item) => item._id === option.variation_id

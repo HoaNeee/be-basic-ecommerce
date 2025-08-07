@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getVariationOptions = exports.getRelatedProduct = exports.getBestSeller = exports.filterProduct = exports.getPriceProduct = exports.detail = exports.productsV2 = exports.products = void 0;
+exports.getVariationOptions = exports.getRelatedProduct = exports.getBestSeller = exports.filterProduct = exports.getPriceProduct = exports.detail = exports.products_v2 = exports.products = void 0;
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const subProductOption_model_1 = __importDefault(require("../../models/subProductOption.model"));
@@ -326,7 +326,7 @@ const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.products = products;
-const productsV2 = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const products_v2 = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
         let find = {
@@ -550,6 +550,19 @@ const productsV2 = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             { $skip: pagiation.skip },
             { $limit: pagiation.limitItems },
         ]);
+        const reviews = yield review_model_1.default.find({
+            deleted: false,
+            product_id: { $in: products.map((item) => item._id) },
+        }, { star: 1, product_id: 1 }).lean();
+        for (const product of products) {
+            const productReviews = reviews.filter((review) => String(review.product_id) === String(product._id));
+            const numberPeople = productReviews.length;
+            const average = Math.round(productReviews.reduce((val, item) => val + item.star, 0) / numberPeople);
+            product["review"] = {
+                numberPeople,
+                average,
+            };
+        }
         res.json({
             code: 200,
             message: "OK",
@@ -568,7 +581,7 @@ const productsV2 = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         });
     }
 });
-exports.productsV2 = productsV2;
+exports.products_v2 = products_v2;
 const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const slug = req.params.slug;
@@ -580,7 +593,11 @@ const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             deleted: false,
         }).lean();
         if (!product) {
-            throw Error("Product not found!!");
+            res.status(404).json({
+                code: 404,
+                message: "Product not found",
+            });
+            return;
         }
         const supplier = yield supplier_model_1.default.findOne({ _id: product.supplier_id });
         if (supplier) {
@@ -851,8 +868,22 @@ exports.filterProduct = filterProduct;
 const getBestSeller = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { products_info } = yield (0, product_1.getTopSellHelper)(req);
+        const product_ids = products_info.map((item) => String(item._id));
+        const [suppliers, reviews] = yield Promise.all([
+            supplier_model_1.default.find({
+                _id: { $in: products_info.map((item) => item.supplier_id) },
+            }),
+            review_model_1.default.find({ product_id: { $in: product_ids } }),
+        ]);
         for (const product of products_info) {
-            const supplier = yield supplier_model_1.default.findOne({ _id: product.supplier_id });
+            const supplier = suppliers.find((item) => String(item._id) === String(product.supplier_id));
+            const productReviews = reviews.filter((review) => String(review.product_id) === String(product._id));
+            const numberPeople = productReviews.length;
+            const average = Math.round(productReviews.reduce((acc, item) => acc + item.star, 0) / numberPeople);
+            product["review"] = {
+                numberPeople,
+                average,
+            };
             product["supplierName"] = supplier.name;
         }
         res.json({
@@ -880,18 +911,37 @@ const getRelatedProduct = (req, res) => __awaiter(void 0, void 0, void 0, functi
         })
             .limit(4)
             .lean();
+        const product_ids = products.map((item) => String(item._id));
+        const [subProducts, suppliers, reviews] = yield Promise.all([
+            subProduct_model_1.default.find({
+                deleted: false,
+                product_id: { $in: product_ids },
+            }),
+            supplier_model_1.default.find({
+                _id: { $in: products.map((item) => item.supplier_id) },
+                deleted: false,
+            }),
+            review_model_1.default.find({
+                deleted: false,
+                product_id: { $in: product_ids },
+            }),
+        ]);
         for (const product of products) {
             if (product.productType === ProductType.VARIATION) {
-                const subProducts = yield subProduct_model_1.default.find({
-                    deleted: false,
-                    product_id: product._id,
-                });
-                if (subProducts.length > 0) {
-                    (0, product_1.solvePriceStock)(product, subProducts);
+                const subs = subProducts.filter((item) => String(item.product_id) === String(product._id));
+                if (subs.length > 0) {
+                    (0, product_1.solvePriceStock)(product, subs);
                 }
             }
-            const supplier = yield supplier_model_1.default.findOne({ _id: product.supplier_id });
+            const supplier = suppliers.find((item) => String(item._id) === String(product.supplier_id));
             product["supplierName"] = supplier.name;
+            const productReviews = reviews.filter((review) => String(review.product_id) === String(product._id));
+            const numberPeople = productReviews.length;
+            const average = Math.round(productReviews.reduce((acc, item) => acc + item.star, 0) / numberPeople);
+            product["review"] = {
+                numberPeople,
+                average,
+            };
         }
         res.json({
             code: 200,

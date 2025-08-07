@@ -400,7 +400,7 @@ export const products = async (req: Request, res: Response) => {
   }
 };
 
-export const productsV2 = async (req, res) => {
+export const products_v2 = async (req, res) => {
   try {
     let find: any = {
       deleted: false,
@@ -649,6 +649,29 @@ export const productsV2 = async (req, res) => {
       { $limit: pagiation.limitItems },
     ]);
 
+    const reviews = await Review.find(
+      {
+        deleted: false,
+        product_id: { $in: products.map((item) => item._id) },
+      },
+      { star: 1, product_id: 1 }
+    ).lean();
+
+    for (const product of products) {
+      const productReviews = reviews.filter(
+        (review) => String(review.product_id) === String(product._id)
+      );
+      const numberPeople = productReviews.length;
+      const average = Math.round(
+        productReviews.reduce((val, item) => val + item.star, 0) / numberPeople
+      );
+
+      product["review"] = {
+        numberPeople,
+        average,
+      };
+    }
+
     res.json({
       code: 200,
       message: "OK",
@@ -682,7 +705,11 @@ export const detail = async (req: Request, res: Response) => {
     }).lean();
 
     if (!product) {
-      throw Error("Product not found!!");
+      res.status(404).json({
+        code: 404,
+        message: "Product not found",
+      });
+      return;
     }
 
     const supplier = await Supplier.findOne({ _id: product.supplier_id });
@@ -1020,8 +1047,30 @@ export const getBestSeller = async (req: Request, res: Response) => {
   try {
     const { products_info } = await getTopSellHelper(req);
 
+    const product_ids = products_info.map((item) => String(item._id));
+
+    const [suppliers, reviews] = await Promise.all([
+      Supplier.find({
+        _id: { $in: products_info.map((item) => item.supplier_id) },
+      }),
+      Review.find({ product_id: { $in: product_ids } }),
+    ]);
+
     for (const product of products_info) {
-      const supplier = await Supplier.findOne({ _id: product.supplier_id });
+      const supplier = suppliers.find(
+        (item) => String(item._id) === String(product.supplier_id)
+      );
+      const productReviews = reviews.filter(
+        (review) => String(review.product_id) === String(product._id)
+      );
+      const numberPeople = productReviews.length;
+      const average = Math.round(
+        productReviews.reduce((acc, item) => acc + item.star, 0) / numberPeople
+      );
+      product["review"] = {
+        numberPeople,
+        average,
+      };
       product["supplierName"] = supplier.name;
     }
 
@@ -1053,19 +1102,50 @@ export const getRelatedProduct = async (req: Request, res: Response) => {
       .limit(4)
       .lean();
 
+    const product_ids = products.map((item) => String(item._id));
+
+    const [subProducts, suppliers, reviews] = await Promise.all([
+      SubProduct.find({
+        deleted: false,
+        product_id: { $in: product_ids },
+      }),
+      Supplier.find({
+        _id: { $in: products.map((item) => item.supplier_id) },
+        deleted: false,
+      }),
+      Review.find({
+        deleted: false,
+        product_id: { $in: product_ids },
+      }),
+    ]);
+
     for (const product of products) {
       if (product.productType === ProductType.VARIATION) {
-        const subProducts = await SubProduct.find({
-          deleted: false,
-          product_id: product._id,
-        });
+        const subs = subProducts.filter(
+          (item) => String(item.product_id) === String(product._id)
+        );
 
-        if (subProducts.length > 0) {
-          solvePriceStock(product, subProducts);
+        if (subs.length > 0) {
+          solvePriceStock(product, subs);
         }
       }
-      const supplier = await Supplier.findOne({ _id: product.supplier_id });
+      const supplier = suppliers.find(
+        (item) => String(item._id) === String(product.supplier_id)
+      );
       product["supplierName"] = supplier.name;
+      const productReviews = reviews.filter(
+        (review) => String(review.product_id) === String(product._id)
+      );
+
+      const numberPeople = productReviews.length;
+      const average = Math.round(
+        productReviews.reduce((acc, item) => acc + item.star, 0) / numberPeople
+      );
+
+      product["review"] = {
+        numberPeople,
+        average,
+      };
     }
 
     res.json({

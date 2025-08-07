@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.testSocket = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct = exports.edit = exports.create = exports.detail = exports.index = void 0;
+exports.testSocket = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct = exports.edit = exports.create = exports.detail_v2 = exports.products = void 0;
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const subProductOption_model_1 = __importDefault(require("../../models/subProductOption.model"));
@@ -48,7 +48,7 @@ const merge = (arr1, arr2) => {
     }
     return res;
 };
-const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         let find = {
             deleted: false,
@@ -73,13 +73,15 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             .skip(objectPagination.skip)
             .limit(objectPagination.limitItems)
             .lean();
+        const product_ids = products.map((item) => String(item._id));
+        const subProducts = yield subProduct_model_1.default.find({
+            product_id: { $in: product_ids },
+            deleted: false,
+        });
         for (const pro of products) {
-            const subProducts = yield subProduct_model_1.default.find({
-                product_id: pro._id,
-                deleted: false,
-            });
-            if (subProducts.length > 0) {
-                (0, product_1.solvePriceStock)(pro, subProducts);
+            const subs = subProducts.filter((item) => String(item.product_id) === String(pro._id));
+            if (subs.length > 0) {
+                (0, product_1.solvePriceStock)(pro, subs);
             }
         }
         res.json({
@@ -99,8 +101,8 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
 });
-exports.index = index;
-const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+exports.products = products;
+const detail_v2 = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const product_id = req.params.id;
         if (!product_id) {
@@ -122,31 +124,37 @@ const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 for (const item of subProducts) {
                     subMap.set(String(item._id), Object.assign({}, item));
                 }
+                const sub_product_ids = subProducts.map((item) => String(item._id));
+                const sub_options = yield subProductOption_model_1.default.find({
+                    deleted: false,
+                    sub_product_id: { $in: sub_product_ids },
+                }).lean();
+                const option_ids = sub_options.map((item) => String(item.variation_option_id));
+                const variation_option_ids = yield variationOption_model_1.default.find({
+                    _id: { $in: option_ids },
+                    deleted: false,
+                });
+                const variation_ids = variation_option_ids.map((item) => String(item.variation_id));
+                const variationsData = yield variation_model_1.default.find({
+                    _id: { $in: variation_ids },
+                    deleted: false,
+                });
                 for (const item of subProducts) {
-                    const subProductOptions = yield subProductOption_model_1.default.find({
-                        deleted: false,
-                        sub_product_id: item._id,
-                    }).lean();
+                    const subProductOptions = sub_options.filter((opt) => String(opt.sub_product_id) === String(item._id));
                     const options = [];
                     if (subProductOptions.length === 0) {
                         subMap.set(String(item._id), null);
                     }
                     else {
                         for (const subOption of subProductOptions) {
-                            const option = yield variationOption_model_1.default.findOne({
-                                _id: subOption.variation_option_id,
-                                deleted: false,
-                            });
+                            const option = variation_option_ids.find((opt) => String(opt._id) === String(subOption.variation_option_id));
                             if (option) {
                                 options.push({
                                     label: option.title,
                                     value: option.id,
                                     sub_product_id: item._id,
                                 });
-                                const variation = yield variation_model_1.default.findOne({
-                                    _id: option.variation_id,
-                                    deleted: false,
-                                });
+                                const variation = variationsData.find((item) => item.id === option.variation_id);
                                 const index = variations.findIndex((item) => item._id === option.variation_id);
                                 if (index !== -1) {
                                     if (!variations[index].options.find((it) => it.value === option.id)) {
@@ -202,7 +210,7 @@ const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
 });
-exports.detail = detail;
+exports.detail_v2 = detail_v2;
 const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { data, subProducts } = req.body;

@@ -88,6 +88,14 @@ export const blogDetail = async (req: Request, res: Response) => {
       status: "published",
     }).lean();
 
+    if (!blog) {
+      res.status(404).json({
+        code: 404,
+        message: "Blog not found",
+      });
+      return;
+    }
+
     const author = await User.findOne({
       _id: blog.user_id,
       deleted: false,
