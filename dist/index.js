@@ -87,23 +87,23 @@ app.use((0, express_session_1.default)({
     secret: process.env.SESSION_SECRET,
     resave: true,
     saveUninitialized: false,
-    cookie: process.env.NODE_ENV === "production"
+    cookie: process.env.NODE_ENV === "dev"
         ? {
-            secure: process.env.NODE_ENV === "production",
+            secure: false,
+        }
+        : {
+            secure: true,
             httpOnly: true,
             sameSite: "none",
             domain: ".kakrist.site",
-        }
-        : {
-            secure: false,
         },
-    store: process.env.NODE_ENV === "production"
-        ? connect_mongo_1.default.create({
+    store: process.env.NODE_ENV === "dev"
+        ? new express_session_1.MemoryStore()
+        : new connect_mongo_1.default({
             mongoUrl: process.env.MONGO_URL,
             collectionName: "sessions",
-            ttl: 2 * 24 * 60 * 60,
-        })
-        : new express_session_1.MemoryStore(),
+            ttl: 24 * 60 * 60,
+        }),
 }));
 app.use(limiter);
 (0, index_route_2.default)(app);

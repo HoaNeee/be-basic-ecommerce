@@ -62,26 +62,27 @@ app.use(
     resave: true,
     saveUninitialized: false,
     cookie:
-      process.env.NODE_ENV === "production"
+      process.env.NODE_ENV === "dev"
         ? {
-            secure: process.env.NODE_ENV === "production",
+            secure: false,
+          }
+        : {
+            secure: true,
             httpOnly: true,
             sameSite: "none",
             domain: ".kakrist.site",
-          }
-        : {
-            secure: false,
           },
     store:
-      process.env.NODE_ENV === "production"
-        ? MongoStore.create({
+      process.env.NODE_ENV === "dev"
+        ? new MemoryStore()
+        : new MongoStore({
             mongoUrl: process.env.MONGO_URL,
             collectionName: "sessions",
-            ttl: 2 * 24 * 60 * 60,
-          })
-        : new MemoryStore(),
+            ttl: 24 * 60 * 60,
+          }),
   })
 );
+
 app.use(limiter);
 
 ClientRoute(app);

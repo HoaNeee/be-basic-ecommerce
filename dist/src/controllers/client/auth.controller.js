@@ -213,13 +213,7 @@ const getInfo = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         if (!customer) {
             throw Error("Not allowed!");
         }
-        if (req.session["has_welcome"] === undefined ||
-            req.session["has_welcome"] === null) {
-            req.session["has_welcome"] = true;
-        }
-        else {
-            req.session["has_welcome"] = false;
-        }
+        console.log(req.session["has_welcome"]);
         res.json({
             code: 200,
             message: "Get info OK!",

@@ -45,12 +45,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDataChart = exports.statistic = exports.changeStatus = exports.create = exports.index = exports.getDataChartHelper = void 0;
+exports.getDataChart = exports.statistic = exports.changeStatus = exports.create = exports.purchases = exports.getDataChartHelper = void 0;
 const purchaseOrder_model_1 = __importDefault(require("../../models/purchaseOrder.model"));
 const product_model_1 = __importDefault(require("../../models/product.model"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const dateHelper = __importStar(require("../../../helpers/getDate"));
+const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
 const getDataChartHelper = (type, day, maxDay, name, Record, keyCost, thisYear) => __awaiter(void 0, void 0, void 0, function* () {
     const oneDay = 1000 * 60 * 60 * 24;
     const response = [];
@@ -124,11 +125,75 @@ const getDataChartHelper = (type, day, maxDay, name, Record, keyCost, thisYear) 
     return response;
 });
 exports.getDataChartHelper = getDataChartHelper;
-const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const purchases = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         let find = {
             deleted: false,
         };
+        const status = req.query.status;
+        const from = req.query.fromDate;
+        const to = req.query.toDate;
+        const keyword = req.query.keyword;
+        const find_supplier = {
+            deleted: false,
+        };
+        const find_product = {
+            deleted: false,
+        };
+        if (keyword) {
+            find_product["$or"] = [
+                { SKU: { $regex: keyword, $options: "si" } },
+                { title: { $regex: keyword, $options: "si" } },
+            ];
+            find_supplier["$or"] = [
+                { name: { $regex: keyword, $options: "si" } },
+                { email: { $regex: keyword, $options: "si" } },
+            ];
+        }
+        if (Object.keys(find_supplier).length > 0) {
+            const suppliers = yield supplier_model_1.default.find(find_supplier);
+            find["$or"] = [
+                {
+                    supplier_id: {
+                        $in: suppliers.map((item) => String(item._id)),
+                    },
+                },
+            ];
+        }
+        if (Object.keys(find_product).length > 0) {
+            const [products, subProducts] = yield Promise.all([
+                product_model_1.default.find(find_product).select("SKU").lean(),
+                subProduct_model_1.default.find(find_product).select("SKU").lean(),
+            ]);
+            const skus = [
+                ...subProducts.map((item) => item.SKU),
+                ...products.map((item) => item.SKU),
+            ];
+            find["$or"] = [
+                ...find["$or"],
+                {
+                    "products.SKU": {
+                        $in: skus,
+                    },
+                },
+            ];
+        }
+        if (from && to) {
+            const oneDay = 1000 * 60 * 60 * 24;
+            const start = new Date(new Date(new Date(from).setUTCHours(0)).getTime() + oneDay);
+            const end = new Date(new Date(new Date(to).setUTCHours(0)).getTime() + oneDay * 2);
+            find = {
+                $and: [
+                    Object.assign({}, find),
+                    { createdAt: { $gte: start } },
+                    { createdAt: { $lt: end } },
+                ],
+            };
+        }
+        if (status) {
+            find["status"] = status;
+        }
         const totalRecord = yield purchaseOrder_model_1.default.countDocuments(find);
         const initialPagination = {
             page: 1,
@@ -145,33 +210,46 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const productsSKU = pos.map((item) => {
             return item.products.map((it) => it.SKU);
         });
+        const ref_ids = pos
+            .filter((item) => item.products.filter((it) => it.ref_id))
+            .map((it) => it.products.map((i) => i.ref_id));
         const flatArr = productsSKU.flat();
+        const flat_ref_ids = ref_ids.flat();
         const subProducts = yield subProduct_model_1.default.find({
-            SKU: { $in: flatArr },
+            $or: [{ SKU: { $in: flatArr } }, { _id: { $in: flat_ref_ids } }],
             deleted: false,
         });
         const productIds = subProducts.map((item) => item.product_id);
         const products = yield product_model_1.default.find({
             $and: [
                 {
-                    $or: [{ _id: { $in: productIds } }, { SKU: { $in: flatArr } }],
+                    $or: [
+                        { _id: { $in: flat_ref_ids } },
+                        { _id: { $in: productIds } },
+                        { SKU: { $in: flatArr } },
+                    ],
                 },
                 { deleted: false },
             ],
         })
             .select("title SKU price")
             .lean();
+        const suppliers = yield supplier_model_1.default.find(find_supplier)
+            .select("name email")
+            .lean();
         for (const po of pos) {
             const templateProduct = products.find((item) => {
-                const it = po.products.find((i) => i.SKU === item.SKU);
+                const it = po.products.find((i) => i.SKU === item.SKU || i.ref_id === String(item._id));
                 return it;
             });
+            po["supplierName"] =
+                ((_a = suppliers.find((item) => String(item._id) === String(po.supplier_id))) === null || _a === void 0 ? void 0 : _a.name) || "Unknown Supplier";
             if (templateProduct) {
                 po["templateProduct"] = templateProduct;
             }
             else {
                 const sub = subProducts.find((item) => {
-                    const it = po.products.find((i) => i.SKU === item.SKU);
+                    const it = po.products.find((i) => i.SKU === item.SKU || i.ref_id === String(item._id));
                     if (it) {
                         return item;
                     }
@@ -201,7 +279,7 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
 });
-exports.index = index;
+exports.purchases = purchases;
 const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const body = req.body;

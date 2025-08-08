@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controller = __importStar(require("../../controllers/admin/purchase.controller"));
 const router = (0, express_1.Router)();
-router.get("/", controller.index);
+router.get("/", controller.purchases);
 router.get("/statistic", controller.statistic);
 router.post("/create", controller.create);
 router.patch("/change-status/:id", controller.changeStatus);

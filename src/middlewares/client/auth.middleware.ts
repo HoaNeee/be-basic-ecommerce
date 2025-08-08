@@ -28,6 +28,15 @@ export const isAccess = async (
 
     req.userId = decoded.userId;
 
+    if (
+      req.session["has_welcome"] === undefined ||
+      req.session["has_welcome"] === null
+    ) {
+      req.session["has_welcome"] = true;
+    } else {
+      req.session["has_welcome"] = false;
+    }
+
     next();
   } catch (error) {
     clearCookie(res);

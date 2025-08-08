@@ -27,6 +27,13 @@ const isAccess = (req, res, next) => __awaiter(void 0, void 0, void 0, function*
         }
         const decoded = jsonwebtoken_1.default.verify(token, process.env.SECRET_JWT_KEY);
         req.userId = decoded.userId;
+        if (req.session["has_welcome"] === undefined ||
+            req.session["has_welcome"] === null) {
+            req.session["has_welcome"] = true;
+        }
+        else {
+            req.session["has_welcome"] = false;
+        }
         next();
     }
     catch (error) {

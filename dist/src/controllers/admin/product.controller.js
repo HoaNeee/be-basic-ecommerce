@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.testSocket = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct = exports.edit = exports.create = exports.detail_v2 = exports.products = void 0;
+exports.testSocket = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct_v2 = exports.editSubProduct = exports.edit = exports.create = exports.detail_v2 = exports.products = void 0;
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const subProductOption_model_1 = __importDefault(require("../../models/subProductOption.model"));
@@ -21,6 +21,7 @@ const variation_model_1 = __importDefault(require("../../models/variation.model"
 const variationOption_model_1 = __importDefault(require("../../models/variationOption.model"));
 const socket_1 = require("../../../socket");
 const product_1 = require("../../../utils/product");
+const purchaseOrder_model_1 = __importDefault(require("../../models/purchaseOrder.model"));
 var ProductType;
 (function (ProductType) {
     ProductType["SIMPLE"] = "simple";
@@ -219,11 +220,47 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const product = new product_model_1.default(Object.assign({ price: price, stock: stock }, data));
         const skus = [(data === null || data === void 0 ? void 0 : data.SKU) || ""];
         let message = "Create new success!!";
+        const prefix_SKU = `KAKRIST-SKU`;
         const subs = [];
         const subOptions = [];
+        const pos = [];
+        let exist_pos = false;
         if (subProducts && subProducts.length > 0) {
             for (const item of subProducts) {
-                const subProduct = new subProduct_model_1.default(Object.assign({ product_id: product.id, price: (item === null || item === void 0 ? void 0 : item.price) || 0, stock: (item === null || item === void 0 ? void 0 : item.stock) || 0 }, item));
+                const subProduct = new subProduct_model_1.default(Object.assign({ product_id: product.id, price: Number((item === null || item === void 0 ? void 0 : item.price) || 0), stock: Number((item === null || item === void 0 ? void 0 : item.stock) || 0), cost: Number((item === null || item === void 0 ? void 0 : item.cost) || 0) }, item));
+                const createPurchaseOrder = (item === null || item === void 0 ? void 0 : item.createPurchaseOrder) || false;
+                if (createPurchaseOrder) {
+                    if (exist_pos) {
+                        const po = pos[0];
+                        const products = po.products;
+                        products.push({
+                            ref_id: subProduct.id,
+                            SKU: subProduct.SKU || "",
+                            quantity: subProduct.stock,
+                            unitCost: subProduct.cost,
+                        });
+                        po.products = products;
+                        po.totalCost = products.reduce((acc, curr) => acc + curr.unitCost * curr.quantity, 0);
+                    }
+                    else {
+                        const po = new purchaseOrder_model_1.default({
+                            products: [
+                                {
+                                    ref_id: subProduct.id,
+                                    SKU: subProduct.SKU || "",
+                                    quantity: subProduct.stock,
+                                    unitCost: subProduct.cost,
+                                },
+                            ],
+                            supplier_id: (data === null || data === void 0 ? void 0 : data.supplier_id) || "",
+                            expectedDelivery: new Date(new Date().getTime() + 5 * 24 * 60 * 60 * 1000),
+                            totalCost: subProduct.stock * subProduct.cost,
+                            typePurchase: "initial",
+                        });
+                        pos.push(po);
+                    }
+                    exist_pos = true;
+                }
                 skus.push((item === null || item === void 0 ? void 0 : item.SKU) || "");
                 subs.push(subProduct);
                 for (const it of item.options) {
@@ -242,7 +279,8 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 const exist = existSkus.find((it) => it.SKU === subProduct.SKU);
                 if (exist || !subProduct.SKU) {
                     message = "Create new success, but some SKU already exist!!";
-                    subProduct.SKU = `KAKRIST-SKU-${new Date().getTime()}`;
+                    subProduct.SKU = `${prefix_SKU}-${(Date.now() +
+                        Math.random() * 1000).toFixed(0)}`;
                 }
             }
         }
@@ -251,14 +289,34 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             deleted: false,
         });
         if (existSkus.length > 0 || !(data === null || data === void 0 ? void 0 : data.SKU)) {
-            product.SKU = `KAKRIST-SKU-${new Date().getTime()}`;
+            product.SKU = `${prefix_SKU}-${(Date.now() +
+                Math.random() * 1000).toFixed(0)}`;
             message = "Create new success, but some SKU already exist!!";
         }
         yield Promise.all([
             product.save(),
             subProduct_model_1.default.insertMany(subs),
             subProductOption_model_1.default.insertMany(subOptions),
+            purchaseOrder_model_1.default.insertMany(pos),
         ]);
+        const createPurchaseOrder = (data === null || data === void 0 ? void 0 : data.createPurchaseOrder) || false;
+        if (createPurchaseOrder && product.productType === ProductType.VARIATION) {
+            const po = new purchaseOrder_model_1.default({
+                products: [
+                    {
+                        ref_id: product.id,
+                        SKU: product.SKU || "",
+                        quantity: product.stock,
+                        unitCost: product.cost || 0,
+                    },
+                ],
+                supplier_id: (data === null || data === void 0 ? void 0 : data.supplier_id) || "",
+                expectedDelivery: new Date(new Date().getTime() + 5 * 24 * 60 * 60 * 1000),
+                totalCost: Number(product.stock * (product.cost || 0)),
+                typePurchase: "initial",
+            });
+            yield po.save();
+        }
         res.json({
             code: 200,
             message: message,
@@ -389,6 +447,100 @@ const editSubProduct = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.editSubProduct = editSubProduct;
+const editSubProduct_v2 = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const product_id = req.params.id;
+        const subProducts = req.body.subProducts;
+        const combinations = req.body.combinations;
+        const prefix_SKU = `KAKRIST-SKU`;
+        const product = yield product_model_1.default.findOne({ _id: product_id, deleted: false });
+        if (!product) {
+            throw Error("product is not found");
+        }
+        if (product.productType !== ProductType.VARIATION) {
+            product.productType = ProductType.VARIATION;
+            yield product.save();
+        }
+        const update_sub_exist = [];
+        for (const item of subProducts) {
+            if (item.sub_product_id) {
+                update_sub_exist.push(subProduct_model_1.default.updateOne({ _id: item.sub_product_id }, {
+                    price: item === null || item === void 0 ? void 0 : item.price,
+                    stock: (item === null || item === void 0 ? void 0 : item.stock) || 0,
+                    thumbnail: (item === null || item === void 0 ? void 0 : item.thumbnail) || "",
+                    discountedPrice: (item === null || item === void 0 ? void 0 : item.discountedPrice) || null,
+                    SKU: (item === null || item === void 0 ? void 0 : item.SKU) ||
+                        `${prefix_SKU}-${(Date.now() + Math.random() * 1000).toFixed(0)}`,
+                }));
+            }
+        }
+        yield Promise.all(update_sub_exist);
+        const dataSubProducts = yield subProduct_model_1.default.find({
+            product_id: product_id,
+            deleted: false,
+        });
+        const keys_combination = combinations.map((item) => item
+            .map((it) => it.value)
+            .sort((a, b) => (a < b ? 1 : -1))
+            .join("-"));
+        const subProductOptions = yield subProductOption_model_1.default.find({
+            sub_product_id: { $in: dataSubProducts.map((item) => item.id) },
+            deleted: false,
+        });
+        const sub_product_need_delete = [];
+        for (const item of dataSubProducts) {
+            const subOptions = subProductOptions.filter((opt) => String(opt.sub_product_id) === String(item._id));
+            const key = subOptions
+                .map((sop) => sop.variation_option_id)
+                .sort((a, b) => (a < b ? 1 : -1))
+                .join("-");
+            if (keys_combination.includes(key)) {
+                const index = keys_combination.findIndex((item) => item === key);
+                if (index !== -1) {
+                    keys_combination.splice(index, 1);
+                }
+            }
+            else {
+                sub_product_need_delete.push(item.id);
+            }
+        }
+        if (sub_product_need_delete.length > 0) {
+            yield subProduct_model_1.default.updateMany({ _id: { $in: sub_product_need_delete } }, { deleted: true, deletedAt: new Date() });
+        }
+        const new_sub_products = [];
+        const new_sub_product_options = [];
+        for (const item of keys_combination) {
+            const newSubProduct = new subProduct_model_1.default({
+                product_id: product_id,
+                SKU: `${prefix_SKU}-${(Date.now() + Math.random() * 1000).toFixed(0)}`,
+            });
+            const options = item.split("-");
+            for (const opt of options) {
+                const subProductOption = new subProductOption_model_1.default({
+                    variation_option_id: opt,
+                    sub_product_id: newSubProduct.id,
+                });
+                new_sub_product_options.push(subProductOption);
+            }
+            new_sub_products.push(newSubProduct);
+        }
+        if (new_sub_products.length > 0) {
+            yield subProduct_model_1.default.insertMany(new_sub_products);
+            yield subProductOption_model_1.default.insertMany(new_sub_product_options);
+        }
+        res.json({
+            code: 200,
+            message: "Successfully!",
+        });
+    }
+    catch (error) {
+        res.json({
+            code: 400,
+            message: error.message || error,
+        });
+    }
+});
+exports.editSubProduct_v2 = editSubProduct_v2;
 const getPriceProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const products = yield product_model_1.default.find({ deleted: false });
     let min = 0, max = 0;
@@ -447,18 +599,20 @@ const filterProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             const skip = objectPagination.skip;
             const limit = objectPagination.limitItems;
             const ids = products.map((item) => item._id);
-            const subProducts = yield subProduct_model_1.default.find({
-                $and: [
-                    { deleted: false },
-                    { product_id: { $in: ids } },
-                    { price: { $gte: price[0] } },
-                    { price: { $lte: price[1] } },
-                ],
-            });
+            const [subProducts, allSubs] = yield Promise.all([
+                subProduct_model_1.default.find({
+                    $and: [
+                        { deleted: false },
+                        { product_id: { $in: ids } },
+                        { price: { $gte: price[0] } },
+                        { price: { $lte: price[1] } },
+                    ],
+                }),
+                subProduct_model_1.default.find({
+                    $and: [{ deleted: false }, { product_id: { $in: ids } }],
+                }).lean(),
+            ]);
             const subSet = new Set([...subProducts.map((item) => item.product_id)]);
-            const allSubs = yield subProduct_model_1.default.find({
-                $and: [{ deleted: false }, { product_id: { $in: ids } }],
-            }).lean();
             const subMap = new Map();
             for (const item of allSubs) {
                 if (!subMap.has(item.product_id)) {
@@ -504,13 +658,17 @@ const filterProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* 
                 .lean()
                 .skip(objectPagination.skip)
                 .limit(objectPagination.limitItems);
+            const subProducts = yield subProduct_model_1.default.find({
+                $and: [
+                    { deleted: false },
+                    { product_id: { $in: products.map((item) => item._id) } },
+                ],
+            });
             for (const product of products) {
                 if (product.productType === "variations") {
-                    const subProducts = yield subProduct_model_1.default.find({
-                        $and: [{ deleted: false, product_id: product._id }],
-                    });
-                    if (subProducts.length > 0) {
-                        (0, product_1.solvePriceStock)(product, subProducts);
+                    const subs = subProducts.filter((item) => String(item.product_id) === String(product._id));
+                    if (subs.length > 0) {
+                        (0, product_1.solvePriceStock)(product, subs);
                     }
                 }
                 data.push(product);

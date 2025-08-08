@@ -4,6 +4,7 @@ const schema = new Schema(
   {
     products: [
       {
+        ref_id: String,
         SKU: String,
         quantity: Number,
         unitCost: Number,

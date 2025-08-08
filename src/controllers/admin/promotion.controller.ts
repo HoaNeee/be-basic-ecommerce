@@ -1,14 +1,50 @@
 import { Request, Response } from "express";
 import Promotion from "../../models/promotion.model";
 import Pagination from "../../../helpers/pagination";
-import Product from "../../models/product.model";
 
 // [GET] /promotions
-export const index = async (req: Request, res: Response) => {
+export const promotions = async (req: Request, res: Response) => {
   try {
-    const find = {
+    let find: any = {
       deleted: false,
     };
+
+    const status = req.query.status;
+    const promotionType = req.query.promotionType;
+    const keyword = req.query.keyword;
+
+    if (status) {
+      const now = new Date();
+      if (status === "intime") {
+        find["$or"] = [
+          { startAt: { $lte: now }, endAt: { $gte: now } },
+          { startAt: { $lte: now }, endAt: { $eq: null } },
+        ];
+      } else if (status === "expired") {
+        find["$or"] = [{ startAt: { $lte: now }, endAt: { $lt: now } }];
+      } else if (status === "upcoming") {
+        find["startAt"] = { $gt: now };
+      }
+    }
+
+    if (promotionType) {
+      find["promotionType"] = promotionType;
+    }
+
+    if (keyword) {
+      find = {
+        ...find,
+        $and: [
+          {
+            $or: [
+              { title: { $regex: keyword, $options: "i" } },
+              { description: { $regex: keyword, $options: "i" } },
+            ],
+          },
+        ],
+      };
+    }
+
     const totalRecord = await Promotion.countDocuments(find);
 
     const initObjPagination = {
@@ -28,8 +64,10 @@ export const index = async (req: Request, res: Response) => {
     res.json({
       code: 200,
       message: "OK",
-      data: records,
-      totalRecord: totalRecord,
+      data: {
+        promotions: records,
+        totalRecord,
+      },
     });
   } catch (error) {
     console.log(error);

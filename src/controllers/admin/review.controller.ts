@@ -4,9 +4,10 @@ import Comment from "../../models/comment.model";
 import Customer from "../../models/customer.model";
 import Product from "../../models/product.model";
 import Pagination from "../../../helpers/pagination";
+import { getWordsFilterInput } from "../../../helpers/convertInput";
 
 // [GET] /reviews
-export const index = async (req: Request, res: Response) => {
+export const reviews = async (req: Request, res: Response) => {
   try {
     let find: any = {
       deleted: false,
@@ -15,15 +16,19 @@ export const index = async (req: Request, res: Response) => {
     let find_customers: any = {
       deleted: false,
     };
-    const keyword = req.query.keyword || "";
+    let keyword = req.query.keyword || "";
 
     if (keyword) {
+      const filterWords = getWordsFilterInput({
+        input: keyword as string,
+        options: "si",
+        type: "$or",
+        keys: ["firstName", "lastName"],
+      });
+
       find_customers = {
         ...find_customers,
-        $or: [
-          { firstName: { $regex: keyword, $options: "si" } },
-          { lastName: { $regex: keyword, $options: "si" } },
-        ],
+        $and: filterWords,
       };
     }
 
@@ -33,6 +38,11 @@ export const index = async (req: Request, res: Response) => {
 
     if (keyword) {
       find["user_id"] = { $in: cus_ids };
+    }
+
+    const star = req.query.star;
+    if (star) {
+      find["star"] = Number(star);
     }
 
     const totalRecord = await Review.countDocuments(find);
@@ -218,6 +228,39 @@ export const removeComment = async (req: Request, res: Response) => {
     res.json({
       code: 200,
       message: "Deleted!!",
+    });
+  } catch (error) {
+    console.log(error.message);
+    res.json({
+      code: 400,
+      message: error.message,
+    });
+  }
+};
+
+// [GET] /reviews/statistics
+export const statistics = async (req: Request, res: Response) => {
+  try {
+    let find: any = {
+      deleted: false,
+    };
+
+    const reviews = await Review.find(find).lean();
+
+    const totalReviews = reviews.length;
+
+    const averageRating = reviews.reduce((acc, review) => {
+      return acc + review.star;
+    }
+    , 0) / totalReviews;
+
+    res.json({
+      code: 200,
+      message: "OK",
+      data: {
+        totalReviews,
+        averageRating: averageRating.toFixed(2)
+      },
     });
   } catch (error) {
     console.log(error.message);

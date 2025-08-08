@@ -48,7 +48,7 @@ const setCookie = (res: Response, accessToken: string, maxAge?: number) => {
     sameSite: "none",
     path: "/",
     maxAge: maxAge || undefined,
-    domain: ".kakrist.site", // -> production
+    domain: ".kakrist.site",
   });
 };
 
@@ -191,8 +191,6 @@ export const updateProfile = async (req: MyRequest, res: Response) => {
 // [GET] /auth/profile
 export const getInfo = async (req: MyRequest, res: Response) => {
   try {
-    // console.log(req.cookies);
-
     const user_id = req.userId;
 
     const customer = await Customer.findOne({
@@ -206,14 +204,7 @@ export const getInfo = async (req: MyRequest, res: Response) => {
       throw Error("Not allowed!");
     }
 
-    if (
-      req.session["has_welcome"] === undefined ||
-      req.session["has_welcome"] === null
-    ) {
-      req.session["has_welcome"] = true;
-    } else {
-      req.session["has_welcome"] = false;
-    }
+    console.log(req.session["has_welcome"]);
 
     res.json({
       code: 200,

@@ -3,7 +3,7 @@ import * as controller from "../../controllers/admin/promotion.controller";
 
 const router: Router = Router();
 
-router.get("/", controller.index);
+router.get("/", controller.promotions);
 router.post("/create", controller.create);
 router.patch("/edit/:id", controller.edit);
 router.delete("/delete/:id", controller.remove);

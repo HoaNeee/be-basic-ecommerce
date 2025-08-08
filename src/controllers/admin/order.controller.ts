@@ -14,7 +14,7 @@ import SubProduct from "../../models/subProduct.model";
 import { getIo } from "../../../socket";
 
 // [GET] /orders
-export const index = async (req: Request, res: Response) => {
+export const orders = async (req: Request, res: Response) => {
   try {
     let find: any = {
       deleted: false,

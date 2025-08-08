@@ -12,13 +12,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.removeComment = exports.getComments = exports.remove = exports.index = void 0;
+exports.statistics = exports.removeComment = exports.getComments = exports.remove = exports.reviews = void 0;
 const review_model_1 = __importDefault(require("../../models/review.model"));
 const comment_model_1 = __importDefault(require("../../models/comment.model"));
 const customer_model_1 = __importDefault(require("../../models/customer.model"));
 const product_model_1 = __importDefault(require("../../models/product.model"));
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
-const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const convertInput_1 = require("../../../helpers/convertInput");
+const reviews = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         let find = {
             deleted: false,
@@ -26,17 +27,24 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         let find_customers = {
             deleted: false,
         };
-        const keyword = req.query.keyword || "";
+        let keyword = req.query.keyword || "";
         if (keyword) {
-            find_customers = Object.assign(Object.assign({}, find_customers), { $or: [
-                    { firstName: { $regex: keyword, $options: "si" } },
-                    { lastName: { $regex: keyword, $options: "si" } },
-                ] });
+            const filterWords = (0, convertInput_1.getWordsFilterInput)({
+                input: keyword,
+                options: "si",
+                type: "$or",
+                keys: ["firstName", "lastName"],
+            });
+            find_customers = Object.assign(Object.assign({}, find_customers), { $and: filterWords });
         }
         const customers = yield customer_model_1.default.find(find_customers);
         const cus_ids = customers.map((item) => item.id);
         if (keyword) {
             find["user_id"] = { $in: cus_ids };
+        }
+        const star = req.query.star;
+        if (star) {
+            find["star"] = Number(star);
         }
         const totalRecord = yield review_model_1.default.countDocuments(find);
         const initPagination = {
@@ -84,7 +92,7 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
 });
-exports.index = index;
+exports.reviews = reviews;
 const remove = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const rv_id = req.params.id;
@@ -178,3 +186,31 @@ const removeComment = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.removeComment = removeComment;
+const statistics = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        let find = {
+            deleted: false,
+        };
+        const reviews = yield review_model_1.default.find(find).lean();
+        const totalReviews = reviews.length;
+        const averageRating = reviews.reduce((acc, review) => {
+            return acc + review.star;
+        }, 0) / totalReviews;
+        res.json({
+            code: 200,
+            message: "OK",
+            data: {
+                totalReviews,
+                averageRating: averageRating.toFixed(2)
+            },
+        });
+    }
+    catch (error) {
+        console.log(error.message);
+        res.json({
+            code: 400,
+            message: error.message,
+        });
+    }
+});
+exports.statistics = statistics;

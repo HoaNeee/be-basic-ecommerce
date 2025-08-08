@@ -4,7 +4,7 @@ import * as controller from "../../controllers/admin/order.controller";
 
 const router = Router();
 
-router.get("/", controller.index);
+router.get("/", controller.orders);
 router.get("/statistic", controller.statistic);
 router.get("/chart", controller.getDataChart);
 router.get("/chart-2", controller.getDataChart2);

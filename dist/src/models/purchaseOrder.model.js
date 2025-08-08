@@ -37,6 +37,7 @@ const mongoose_1 = __importStar(require("mongoose"));
 const schema = new mongoose_1.Schema({
     products: [
         {
+            ref_id: String,
             SKU: String,
             quantity: Number,
             unitCost: Number,

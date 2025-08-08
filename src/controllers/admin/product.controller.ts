@@ -11,6 +11,8 @@ import {
   solveOptionSubProduct,
   solvePriceStock,
 } from "../../../utils/product";
+import { MyRequest } from "../../middlewares/admin/auth.middleware";
+import PurchaseOrder from "../../models/purchaseOrder.model";
 
 enum ProductType {
   SIMPLE = "simple",
@@ -288,17 +290,60 @@ export const create = async (req: Request, res: Response) => {
     const skus = [data?.SKU || ""];
 
     let message = "Create new success!!";
+    const prefix_SKU = `KAKRIST-SKU`;
 
     const subs = [];
     const subOptions = [];
+    const pos = [];
+    let exist_pos = false;
     if (subProducts && subProducts.length > 0) {
       for (const item of subProducts) {
         const subProduct = new SubProduct({
           product_id: product.id,
-          price: item?.price || 0,
-          stock: item?.stock || 0,
+          price: Number(item?.price || 0),
+          stock: Number(item?.stock || 0),
+          cost: Number(item?.cost || 0),
           ...item,
         });
+
+        // Check if create purchase order
+        const createPurchaseOrder = item?.createPurchaseOrder || false;
+        if (createPurchaseOrder) {
+          if (exist_pos) {
+            const po = pos[0];
+            const products = po.products;
+            products.push({
+              ref_id: subProduct.id,
+              SKU: subProduct.SKU || "",
+              quantity: subProduct.stock,
+              unitCost: subProduct.cost,
+            });
+            po.products = products;
+            po.totalCost = products.reduce(
+              (acc: number, curr: any) => acc + curr.unitCost * curr.quantity,
+              0
+            );
+          } else {
+            const po = new PurchaseOrder({
+              products: [
+                {
+                  ref_id: subProduct.id,
+                  SKU: subProduct.SKU || "",
+                  quantity: subProduct.stock,
+                  unitCost: subProduct.cost,
+                },
+              ],
+              supplier_id: data?.supplier_id || "",
+              expectedDelivery: new Date(
+                new Date().getTime() + 5 * 24 * 60 * 60 * 1000
+              ),
+              totalCost: subProduct.stock * subProduct.cost,
+              typePurchase: "initial",
+            });
+            pos.push(po);
+          }
+          exist_pos = true;
+        }
 
         skus.push(item?.SKU || "");
 
@@ -322,7 +367,10 @@ export const create = async (req: Request, res: Response) => {
         const exist = existSkus.find((it) => it.SKU === subProduct.SKU);
         if (exist || !subProduct.SKU) {
           message = "Create new success, but some SKU already exist!!";
-          subProduct.SKU = `KAKRIST-SKU-${new Date().getTime()}`;
+          subProduct.SKU = `${prefix_SKU}-${(
+            Date.now() +
+            Math.random() * 1000
+          ).toFixed(0)}`;
         }
       }
     }
@@ -333,7 +381,10 @@ export const create = async (req: Request, res: Response) => {
     });
 
     if (existSkus.length > 0 || !data?.SKU) {
-      product.SKU = `KAKRIST-SKU-${new Date().getTime()}`;
+      product.SKU = `${prefix_SKU}-${(
+        Date.now() +
+        Math.random() * 1000
+      ).toFixed(0)}`;
       message = "Create new success, but some SKU already exist!!";
     }
 
@@ -341,7 +392,30 @@ export const create = async (req: Request, res: Response) => {
       product.save(),
       SubProduct.insertMany(subs),
       SubProductOption.insertMany(subOptions),
+      PurchaseOrder.insertMany(pos),
     ]);
+
+    const createPurchaseOrder = data?.createPurchaseOrder || false;
+
+    if (createPurchaseOrder && product.productType === ProductType.VARIATION) {
+      const po = new PurchaseOrder({
+        products: [
+          {
+            ref_id: product.id,
+            SKU: product.SKU || "",
+            quantity: product.stock,
+            unitCost: product.cost || 0,
+          },
+        ],
+        supplier_id: data?.supplier_id || "",
+        expectedDelivery: new Date(
+          new Date().getTime() + 5 * 24 * 60 * 60 * 1000
+        ),
+        totalCost: Number(product.stock * (product.cost || 0)),
+        typePurchase: "initial",
+      });
+      await po.save();
+    }
 
     res.json({
       code: 200,
@@ -505,6 +579,140 @@ export const editSubProduct = async (req: Request, res: Response) => {
   }
 };
 
+// [PATCH] /products/edit-sub-product/:id
+export const editSubProduct_v2 = async (req: MyRequest, res: Response) => {
+  try {
+    const product_id = req.params.id;
+    const subProducts = req.body.subProducts;
+    const combinations = req.body.combinations;
+
+    /*
+    [
+      {
+        value: string,
+        sub_product_id: string,    
+      }
+    ]
+    */
+
+    const prefix_SKU = `KAKRIST-SKU`;
+
+    const product = await Product.findOne({ _id: product_id, deleted: false });
+
+    if (!product) {
+      throw Error("product is not found");
+    }
+
+    if (product.productType !== ProductType.VARIATION) {
+      product.productType = ProductType.VARIATION;
+      await product.save();
+    }
+
+    const update_sub_exist = [];
+
+    for (const item of subProducts) {
+      if (item.sub_product_id) {
+        update_sub_exist.push(
+          SubProduct.updateOne(
+            { _id: item.sub_product_id },
+            {
+              price: item?.price,
+              stock: item?.stock || 0,
+              thumbnail: item?.thumbnail || "",
+              discountedPrice: item?.discountedPrice || null,
+              SKU:
+                item?.SKU ||
+                `${prefix_SKU}-${(Date.now() + Math.random() * 1000).toFixed(
+                  0
+                )}`,
+            }
+          )
+        );
+      }
+    }
+
+    await Promise.all(update_sub_exist);
+
+    const dataSubProducts = await SubProduct.find({
+      product_id: product_id,
+      deleted: false,
+    });
+
+    const keys_combination: any[] = combinations.map((item: any) =>
+      item
+        .map((it: any) => it.value)
+        .sort((a: any, b: any) => (a < b ? 1 : -1))
+        .join("-")
+    );
+
+    const subProductOptions = await SubProductOption.find({
+      sub_product_id: { $in: dataSubProducts.map((item) => item.id) },
+      deleted: false,
+    });
+
+    const sub_product_need_delete = [];
+
+    for (const item of dataSubProducts) {
+      const subOptions = subProductOptions.filter(
+        (opt) => String(opt.sub_product_id) === String(item._id)
+      );
+      const key = subOptions
+        .map((sop) => sop.variation_option_id)
+        .sort((a, b) => (a < b ? 1 : -1))
+        .join("-");
+      if (keys_combination.includes(key)) {
+        const index = keys_combination.findIndex((item) => item === key);
+        if (index !== -1) {
+          keys_combination.splice(index, 1);
+        }
+      } else {
+        sub_product_need_delete.push(item.id);
+      }
+    }
+
+    if (sub_product_need_delete.length > 0) {
+      await SubProduct.updateMany(
+        { _id: { $in: sub_product_need_delete } },
+        { deleted: true, deletedAt: new Date() }
+      );
+    }
+
+    const new_sub_products = [];
+    const new_sub_product_options = [];
+
+    for (const item of keys_combination) {
+      const newSubProduct = new SubProduct({
+        product_id: product_id,
+        SKU: `${prefix_SKU}-${(Date.now() + Math.random() * 1000).toFixed(0)}`,
+      });
+      const options = item.split("-");
+      for (const opt of options) {
+        const subProductOption = new SubProductOption({
+          variation_option_id: opt,
+          sub_product_id: newSubProduct.id,
+        });
+        new_sub_product_options.push(subProductOption);
+      }
+      new_sub_products.push(newSubProduct);
+    }
+
+    if (new_sub_products.length > 0) {
+      await SubProduct.insertMany(new_sub_products);
+      await SubProductOption.insertMany(new_sub_product_options);
+    }
+
+    res.json({
+      code: 200,
+      message: "Successfully!",
+    });
+  } catch (error) {
+    res.json({
+      code: 400,
+      message: error.message || error,
+    });
+  }
+};
+
 //[GET] /products/get-price
 export const getPriceProduct = async (req: Request, res: Response) => {
   const products = await Product.find({ deleted: false });
@@ -589,20 +797,21 @@ export const filterProduct = async (req: Request, res: Response) => {
 
       const ids = products.map((item) => item._id);
 
-      const subProducts = await SubProduct.find({
-        $and: [
-          { deleted: false },
-          { product_id: { $in: ids } },
-          { price: { $gte: price[0] } },
-          { price: { $lte: price[1] } },
-        ],
-      });
+      const [subProducts, allSubs] = await Promise.all([
+        SubProduct.find({
+          $and: [
+            { deleted: false },
+            { product_id: { $in: ids } },
+            { price: { $gte: price[0] } },
+            { price: { $lte: price[1] } },
+          ],
+        }),
+        SubProduct.find({
+          $and: [{ deleted: false }, { product_id: { $in: ids } }],
+        }).lean(),
+      ]);
 
       const subSet = new Set([...subProducts.map((item) => item.product_id)]);
-
-      const allSubs = await SubProduct.find({
-        $and: [{ deleted: false }, { product_id: { $in: ids } }],
-      }).lean();
 
       const subMap = new Map();
       for (const item of allSubs) {
@@ -651,13 +860,20 @@ export const filterProduct = async (req: Request, res: Response) => {
         .skip(objectPagination.skip)
         .limit(objectPagination.limitItems);
 
+      const subProducts = await SubProduct.find({
+        $and: [
+          { deleted: false },
+          { product_id: { $in: products.map((item) => item._id) } },
+        ],
+      });
+
       for (const product of products) {
         if (product.productType === "variations") {
-          const subProducts = await SubProduct.find({
-            $and: [{ deleted: false, product_id: product._id }],
-          });
-          if (subProducts.length > 0) {
-            solvePriceStock(product, subProducts);
+          const subs = subProducts.filter(
+            (item) => String(item.product_id) === String(product._id)
+          );
+          if (subs.length > 0) {
+            solvePriceStock(product, subs);
           }
         }
         data.push(product);

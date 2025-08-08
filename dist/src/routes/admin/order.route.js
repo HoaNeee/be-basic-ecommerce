@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controller = __importStar(require("../../controllers/admin/order.controller"));
 const router = (0, express_1.Router)();
-router.get("/", controller.index);
+router.get("/", controller.orders);
 router.get("/statistic", controller.statistic);
 router.get("/chart", controller.getDataChart);
 router.get("/chart-2", controller.getDataChart2);

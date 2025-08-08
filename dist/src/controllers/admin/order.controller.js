@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDataChart2 = exports.getDataChart = exports.statistic = exports.detail = exports.changeStatus = exports.index = void 0;
+exports.getDataChart2 = exports.getDataChart = exports.statistic = exports.detail = exports.changeStatus = exports.orders = void 0;
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const order_model_1 = __importDefault(require("../../models/order.model"));
 const cart_model_1 = __importDefault(require("../../models/cart.model"));
@@ -58,7 +58,7 @@ const notification_model_1 = __importDefault(require("../../models/notification.
 const product_model_1 = __importDefault(require("../../models/product.model"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const socket_1 = require("../../../socket");
-const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const orders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         let find = {
             deleted: false,
@@ -136,7 +136,7 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
 });
-exports.index = index;
+exports.orders = orders;
 const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const order_id = req.params.id;
