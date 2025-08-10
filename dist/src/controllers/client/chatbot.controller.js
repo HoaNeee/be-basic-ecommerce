@@ -78,8 +78,10 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const action = req.body.action || "ask";
         if (action === "suggest") {
             const type = req.body.type;
+            console.log(type, action);
             if (type === "search_product") {
-                return yield promptProduct(req, res, input, chat, type);
+                const products = yield getProductsWithFields(input, req);
+                return yield promptProduct(req, res, input, chat, type, products);
             }
             const product = yield getProductUsingInput(input);
             if (!product) {
@@ -94,7 +96,7 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     categories: product.categories || [],
                     productType: "simple",
                 };
-                const similar_products = yield getproducts(object, req);
+                const similar_products = yield getProducts(object, req);
                 return yield promptProduct(req, res, input, chat, type, similar_products);
             }
             return yield promptProductDetail(req, res, input, chat, type, product);
@@ -144,43 +146,6 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.chatBot = chatBot;
-const createOrGetChatHistory = (map, sessionId) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        if (!map.has(sessionId)) {
-            const initialHistory = [
-                {
-                    role: "user",
-                    parts: [
-                        {
-                            text: "Xin chào!, bạn là một chuyên gia về tư vấn, bán hàng trên web mang thương hiệu Kakrist, hãy trả lời người dùng một cách tự nhiên và thân thiện nhé.",
-                        },
-                    ],
-                },
-                {
-                    role: "model",
-                    parts: [
-                        {
-                            text: "Chào bạn! Rất vui được hỗ trợ bạn tìm kiếm sản phẩm. Bạn đang quan tâm đến loại sản phẩm nào hoặc có nhu cầu cụ thể nào không?",
-                        },
-                    ],
-                },
-            ];
-            const newChat = gemAI.chats.create({
-                model: "gemini-2.5-flash",
-                history: initialHistory,
-            });
-            map.set(sessionId, newChat);
-            setTimeout(() => {
-                map.delete(sessionId);
-            }, 1000 * 60 * 60 * 24);
-        }
-        return map.get(sessionId);
-    }
-    catch (error) {
-        console.error("Error creating or getting chat history:", error);
-        throw error;
-    }
-});
 const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
@@ -251,7 +216,7 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
         console.log(object);
         if (!object.new && object.intent === "search_product") {
             if (object.intent === "search_product") {
-                const products = yield getproducts(object.query, req);
+                const products = yield getProducts(object.query, req);
                 yield promptProduct(req, res, input, chatModel, object.intent, products);
             }
             return "";
@@ -484,14 +449,14 @@ const getProductsWithFields = (input, req) => __awaiter(void 0, void 0, void 0, 
         });
         const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);
         const object = JSON.parse(output);
-        return yield getproducts(object, req);
+        return yield getProducts(object, req);
     }
     catch (error) {
         console.error("Error products:", error);
         throw error;
     }
 });
-const getproducts = (object, req) => __awaiter(void 0, void 0, void 0, function* () {
+const getProducts = (object, req) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         let find = {
             deleted: false,
@@ -831,6 +796,43 @@ const messageTalk = (input, chat) => __awaiter(void 0, void 0, void 0, function*
     }
     catch (error) {
         console.error("Error occurred while talking message:", error);
+        throw error;
+    }
+});
+const createOrGetChatHistory = (map, sessionId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        if (!map.has(sessionId)) {
+            const initialHistory = [
+                {
+                    role: "user",
+                    parts: [
+                        {
+                            text: "Xin chào!, bạn là một chuyên gia về tư vấn, bán hàng trên web mang thương hiệu Kakrist, hãy trả lời người dùng một cách tự nhiên và thân thiện nhé.",
+                        },
+                    ],
+                },
+                {
+                    role: "model",
+                    parts: [
+                        {
+                            text: "Chào bạn! Rất vui được hỗ trợ bạn tìm kiếm sản phẩm. Bạn đang quan tâm đến loại sản phẩm nào hoặc có nhu cầu cụ thể nào không?",
+                        },
+                    ],
+                },
+            ];
+            const newChat = gemAI.chats.create({
+                model: "gemini-2.5-flash",
+                history: initialHistory,
+            });
+            map.set(sessionId, newChat);
+            setTimeout(() => {
+                map.delete(sessionId);
+            }, 1000 * 60 * 60 * 24);
+        }
+        return map.get(sessionId);
+    }
+    catch (error) {
+        console.error("Error creating or getting chat history:", error);
         throw error;
     }
 });

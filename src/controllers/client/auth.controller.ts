@@ -204,8 +204,6 @@ export const getInfo = async (req: MyRequest, res: Response) => {
       throw Error("Not allowed!");
     }
 
-    console.log(req.session["has_welcome"]);
-
     res.json({
       code: 200,
       message: "Get info OK!",

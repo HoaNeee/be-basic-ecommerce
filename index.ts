@@ -85,6 +85,13 @@ app.use(
 
 app.use(limiter);
 
+app.use((req, res, next) => {
+  if (req.session["createdAt"] === undefined) {
+    req.session["createdAt"] = new Date();
+  }
+  next();
+});
+
 ClientRoute(app);
 AdminRoute(app);
 NotificationRoute(app);
