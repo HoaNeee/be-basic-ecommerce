@@ -290,7 +290,10 @@ const getDataChart = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const type = req.query.type;
         let data = [];
         if (type === "weekly") {
-            const dayOfTheWeek = new Date().getDay();
+            let dayOfTheWeek = new Date().getDay();
+            if (dayOfTheWeek === 0) {
+                dayOfTheWeek = 7;
+            }
             const response = yield (0, purchase_controller_1.getDataChartHelper)(type, dayOfTheWeek, 7, "orders", order_model_1.default, "price");
             data = [...response];
         }

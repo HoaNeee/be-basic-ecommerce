@@ -314,7 +314,11 @@ export const getDataChart = async (req: Request, res: Response) => {
     let data = [];
 
     if (type === "weekly") {
-      const dayOfTheWeek = new Date().getDay();
+      let dayOfTheWeek = new Date().getDay();
+
+      if (dayOfTheWeek === 0) {
+        dayOfTheWeek = 7;
+      }
 
       const response = await getDataChartHelper(
         type,

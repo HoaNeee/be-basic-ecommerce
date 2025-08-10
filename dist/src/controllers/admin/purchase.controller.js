@@ -407,7 +407,10 @@ const getDataChart = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const type = req.query.type;
         let data = [];
         if (type === "weekly") {
-            const dayOfTheWeek = new Date().getDay();
+            let dayOfTheWeek = new Date().getDay();
+            if (dayOfTheWeek === 0) {
+                dayOfTheWeek = 7;
+            }
             const response = yield (0, exports.getDataChartHelper)(type, dayOfTheWeek, 7, "purchase", purchaseOrder_model_1.default, "unitCost");
             data = [...response];
         }
@@ -418,7 +421,7 @@ const getDataChart = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             const response = yield (0, exports.getDataChartHelper)(type, dayOfTheMonth, dateOfMonth, "purchase", purchaseOrder_model_1.default, "unitCost");
             data = [...response];
         }
-        else {
+        else if (type === "year") {
             const response = yield (0, exports.getDataChartHelper)("year", 1, 12, "purchase", purchaseOrder_model_1.default, "unitCost");
             data = [...response];
         }

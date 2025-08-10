@@ -12,16 +12,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.testSocket = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct_v2 = exports.editSubProduct = exports.edit = exports.create = exports.detail_v2 = exports.products = void 0;
+exports.changeSubProductTrashAll = exports.changeTrashAll = exports.bulkChangeSubProductTrash = exports.bulkChangeTrash = exports.changeSubproductTrashOne = exports.changeTrashOne = exports.trashSubProducts = exports.trashProducts = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct_v2 = exports.editSubProduct = exports.edit = exports.create = exports.detail_v2 = exports.products = void 0;
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const subProductOption_model_1 = __importDefault(require("../../models/subProductOption.model"));
 const product_model_1 = __importDefault(require("../../models/product.model"));
 const variation_model_1 = __importDefault(require("../../models/variation.model"));
 const variationOption_model_1 = __importDefault(require("../../models/variationOption.model"));
-const socket_1 = require("../../../socket");
 const product_1 = require("../../../utils/product");
 const purchaseOrder_model_1 = __importDefault(require("../../models/purchaseOrder.model"));
+const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
 var ProductType;
 (function (ProductType) {
     ProductType["SIMPLE"] = "simple";
@@ -935,16 +935,86 @@ const lowQuantity = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.lowQuantity = lowQuantity;
-const testSocket = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const trashProducts = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { message } = req.body;
-        const io = (0, socket_1.getIo)();
-        io.emit("SERVER_RETURN_TEST", { message });
+        let find = {
+            deleted: true,
+        };
+        const keyword = req.query.keyword || "";
+        if (keyword) {
+            find.$or = [
+                { title: { $regex: keyword, $options: "si" } },
+                { SKU: { $regex: keyword, $options: "si" } },
+            ];
+        }
+        const initPagination = {
+            page: 1,
+            limitItems: 10,
+        };
+        if (req.query.limit) {
+            initPagination.limitItems = Number(req.query.limit);
+        }
+        const totalRecord = yield product_model_1.default.countDocuments(find);
+        const pagination = (0, pagination_1.default)(initPagination, req.query, totalRecord);
+        const products = yield product_model_1.default.aggregate([
+            { $match: find },
+            {
+                $addFields: {
+                    product_id_string: { $toString: "$_id" },
+                    categories_object_ids: {
+                        $map: {
+                            input: "$categories",
+                            as: "category",
+                            in: { $toObjectId: "$$category" },
+                        },
+                    },
+                },
+            },
+            {
+                $lookup: {
+                    from: "sub-products",
+                    localField: "product_id_string",
+                    foreignField: "product_id",
+                    as: "subProducts",
+                },
+            },
+            {
+                $lookup: {
+                    from: "categories",
+                    localField: "categories_object_ids",
+                    foreignField: "_id",
+                    as: "categories_info",
+                    pipeline: [{ $project: { title: 1 } }],
+                },
+            },
+            {
+                $set: {
+                    count_sub_product: { $size: "$subProducts" },
+                },
+            },
+            { $unset: ["subProducts"] },
+            { $skip: pagination.skip },
+            { $limit: pagination.limitItems },
+        ]);
+        const supplier_ids = products
+            .filter((it) => it.supplier_id)
+            .map((item) => item.supplier_id);
+        const suppliers = yield supplier_model_1.default.find({ _id: { $in: supplier_ids } });
+        for (const product of products) {
+            const supplier = suppliers.find((it) => it._id === product.supplier_id);
+            if (supplier) {
+                product.supplierName = supplier.name;
+            }
+            else {
+                product.supplierName = "Unknown";
+            }
+        }
         res.json({
             code: 200,
             message: "OK",
             data: {
-                message: `Received message: ${message}`,
+                products,
+                totalRecord,
             },
         });
     }
@@ -955,4 +1025,305 @@ const testSocket = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         });
     }
 });
-exports.testSocket = testSocket;
+exports.trashProducts = trashProducts;
+const trashSubProducts = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        let find = {
+            deleted: true,
+        };
+        const keyword = req.query.keyword || "";
+        if (keyword) {
+            find.$or = [
+                { title: { $regex: keyword, $options: "si" } },
+                { SKU: { $regex: keyword, $options: "si" } },
+            ];
+            const product = yield product_model_1.default.find(find);
+            if (product && product.length > 0) {
+                find.product_id = { $in: product.map((item) => item._id) };
+            }
+            else {
+                find.product_id = { $in: [] };
+            }
+        }
+        const initPagination = {
+            page: 1,
+            limitItems: 10,
+        };
+        if (req.query.limit) {
+            initPagination.limitItems = Number(req.query.limit);
+        }
+        const totalRecord = yield subProduct_model_1.default.countDocuments(find);
+        const pagination = (0, pagination_1.default)(initPagination, req.query, totalRecord);
+        const subProducts = yield subProduct_model_1.default.find(find)
+            .sort({ createdAt: "desc" })
+            .skip((pagination.page - 1) * pagination.limitItems)
+            .limit(pagination.limitItems)
+            .lean();
+        const product_ids = subProducts.map((item) => item.product_id);
+        const sub_ids = subProducts.map((item) => String(item._id));
+        const [subOptions, products] = yield Promise.all([
+            subProductOption_model_1.default.find({
+                sub_product_id: { $in: sub_ids },
+            }),
+            product_model_1.default.find({
+                _id: { $in: product_ids },
+            }),
+        ]);
+        const options = yield variationOption_model_1.default.find({
+            _id: { $in: subOptions.map((item) => item.variation_option_id) },
+        });
+        for (const sub of subProducts) {
+            const product = products.find((it) => it.id === sub.product_id);
+            if (product) {
+                sub["thumbnail_product"] = product.thumbnail;
+                sub["title"] = product.title;
+            }
+            const subOpts = subOptions.filter((item) => item.sub_product_id === String(sub._id));
+            if (subOpts && subOpts.length) {
+                const opts = options.filter((item) => subOpts
+                    .map((subOpt) => subOpt.variation_option_id)
+                    .includes(String(item._id)));
+                if (opts && opts.length) {
+                    sub["options"] = opts;
+                }
+            }
+        }
+        res.json({
+            code: 200,
+            message: "OK",
+            data: {
+                subProducts,
+                totalRecord,
+            },
+        });
+    }
+    catch (error) {
+        res.json({
+            code: 400,
+            message: error.message || error,
+        });
+    }
+});
+exports.trashSubProducts = trashSubProducts;
+const changeTrashOne = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const product_id = req.params.productId;
+        const type = req.query.type;
+        const checkedSubProduct = req.body.checkedSubProduct;
+        return yield changeTrashOneHelper(product_id, type, checkedSubProduct, req, res, product_model_1.default, true);
+    }
+    catch (error) {
+        res.json({
+            code: 400,
+            message: error.message || error,
+        });
+    }
+});
+exports.changeTrashOne = changeTrashOne;
+const changeSubproductTrashOne = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const sub_id = req.params.subId;
+        const type = req.query.type;
+        return yield changeTrashOneHelper(sub_id, type, false, req, res, subProduct_model_1.default, false);
+    }
+    catch (error) {
+        res.status(400).json({
+            code: 400,
+            message: error.message || error,
+        });
+    }
+});
+exports.changeSubproductTrashOne = changeSubproductTrashOne;
+const bulkChangeTrash = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const action = req.query.action;
+        const ids = req.body.ids;
+        const checkedSubProduct = req.body.checkedSubProduct;
+        return yield bulkChangeHelper(ids, action, checkedSubProduct, req, res, product_model_1.default);
+    }
+    catch (error) {
+        res.json({
+            code: 400,
+            message: error.message || error,
+        });
+    }
+});
+exports.bulkChangeTrash = bulkChangeTrash;
+const bulkChangeSubProductTrash = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const action = req.query.action;
+        const ids = req.body.ids;
+        return yield bulkChangeHelper(ids, action, false, req, res, subProduct_model_1.default, "subProduct");
+    }
+    catch (error) {
+        res.json({
+            code: 400,
+            message: error.message || error,
+        });
+    }
+});
+exports.bulkChangeSubProductTrash = bulkChangeSubProductTrash;
+const changeTrashAll = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const action = req.query.action;
+        const checkedSubProduct = req.body.checkedSubProduct;
+        return yield changeTrashAllHelper(action, checkedSubProduct, req, res, product_model_1.default, "product");
+    }
+    catch (error) {
+        res.json({
+            code: 400,
+            message: error.message || error,
+        });
+    }
+});
+exports.changeTrashAll = changeTrashAll;
+const changeSubProductTrashAll = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const action = req.query.action;
+        return yield changeTrashAllHelper(action, false, req, res, subProduct_model_1.default, "subProduct");
+    }
+    catch (error) {
+        res.json({
+            code: 400,
+            message: error.message || error,
+        });
+    }
+});
+exports.changeSubProductTrashAll = changeSubProductTrashAll;
+const changeTrashOneHelper = (id, type, checkedSubProduct, req, res, Model, isProduct) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        if (!id) {
+            res.status(400).json({
+                code: 400,
+                message: "Product ID is required",
+            });
+            return;
+        }
+        const record = yield Model.findOne({ _id: id, deleted: true });
+        if (!record) {
+            res.status(404).json({
+                code: 404,
+                message: "Product not found",
+            });
+            return;
+        }
+        if (type === "restore") {
+            record.deleted = false;
+            delete record.deletedAt;
+            if (checkedSubProduct &&
+                isProduct &&
+                record.productType === "variations") {
+                const subProducts = yield subProduct_model_1.default.find({
+                    product_id: record._id,
+                    deleted: true,
+                });
+                yield Promise.all([
+                    subProductOption_model_1.default.updateMany({ sub_product_id: { $in: subProducts.map((item) => item._id) } }, { deleted: false }),
+                    subProduct_model_1.default.updateMany({ _id: { $in: subProducts.map((item) => item._id) } }, { deleted: false }),
+                ]);
+            }
+            yield record.save();
+        }
+        else if (type === "delete") {
+            if (checkedSubProduct &&
+                isProduct &&
+                record.productType === "variations") {
+                const subProducts = yield subProduct_model_1.default.find({ product_id: record._id });
+                yield Promise.all([
+                    subProductOption_model_1.default.deleteMany({
+                        sub_product_id: { $in: subProducts.map((item) => item._id) },
+                    }),
+                    subProduct_model_1.default.deleteMany({
+                        _id: { $in: subProducts.map((item) => item._id) },
+                    }),
+                ]);
+            }
+            yield Model.deleteOne({ _id: id });
+        }
+        res.json({
+            code: 200,
+            message: `${type === "restore" ? "Restored" : "Deleted"} Successfully`,
+        });
+    }
+    catch (error) {
+        throw error;
+    }
+});
+const bulkChangeHelper = (ids_1, action_1, checkedSubProduct_1, req_1, res_1, Model_1, ...args_1) => __awaiter(void 0, [ids_1, action_1, checkedSubProduct_1, req_1, res_1, Model_1, ...args_1], void 0, function* (ids, action, checkedSubProduct, req, res, Model, type = "product") {
+    try {
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            res.status(400).json({
+                code: 400,
+                message: "Product IDs are required",
+            });
+            return;
+        }
+        const records = yield Model.find({ _id: { $in: ids }, deleted: true });
+        if (!records || records.length === 0) {
+            res.status(404).json({
+                code: 404,
+                message: "No products found",
+            });
+            return;
+        }
+        if (action === "restore") {
+            yield Model.updateMany({ _id: { $in: ids } }, { deleted: false });
+            if (checkedSubProduct && type === "product") {
+                const subProducts = yield subProduct_model_1.default.find({
+                    product_id: { $in: ids },
+                    deleted: true,
+                });
+                yield Promise.all([
+                    subProductOption_model_1.default.updateMany({ sub_product_id: { $in: subProducts.map((item) => item._id) } }, { deleted: false }),
+                    subProduct_model_1.default.updateMany({ _id: { $in: subProducts.map((item) => item._id) } }, { deleted: false }),
+                ]);
+            }
+        }
+        else if (action === "delete") {
+            yield Model.deleteMany({ _id: { $in: ids } });
+            if (checkedSubProduct && type === "product") {
+                const subProducts = yield subProduct_model_1.default.find({ product_id: { $in: ids } });
+                yield Promise.all([
+                    subProductOption_model_1.default.deleteMany({
+                        sub_product_id: { $in: subProducts.map((item) => item._id) },
+                    }),
+                    subProduct_model_1.default.deleteMany({
+                        _id: { $in: subProducts.map((item) => item._id) },
+                    }),
+                ]);
+            }
+        }
+        res.json({
+            code: 200,
+            message: `${action === "restore" ? "Restored" : "Deleted"} Successfully`,
+        });
+    }
+    catch (error) {
+        console.log(error);
+        throw error;
+    }
+});
+const changeTrashAllHelper = (action_1, checkedSubProduct_1, req_1, res_1, Model_1, ...args_1) => __awaiter(void 0, [action_1, checkedSubProduct_1, req_1, res_1, Model_1, ...args_1], void 0, function* (action, checkedSubProduct, req, res, Model, type = "product") {
+    try {
+        if (action === "restore") {
+            yield Model.updateMany({ deleted: true }, { deleted: false, deletedAt: null });
+            if (checkedSubProduct && type === "product") {
+                yield subProduct_model_1.default.updateMany({ deleted: true }, { deleted: false, deletedAt: null });
+            }
+        }
+        else if (action === "delete") {
+            yield Model.deleteMany({ deleted: true });
+            if (checkedSubProduct && type === "product") {
+                yield subProduct_model_1.default.deleteMany({ deleted: true });
+            }
+        }
+        res.json({
+            code: 200,
+            message: `${action === "restore" ? "Restored" : "Deleted"} Successfully`,
+        });
+    }
+    catch (error) {
+        console.log(error);
+        throw error;
+    }
+});

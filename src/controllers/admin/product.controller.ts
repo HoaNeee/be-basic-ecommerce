@@ -1,3 +1,4 @@
+import { Model } from "mongoose";
 import { Request, Response } from "express";
 import Pagination from "../../../helpers/pagination";
 import SubProduct from "../../models/subProduct.model";
@@ -13,6 +14,7 @@ import {
 } from "../../../utils/product";
 import { MyRequest } from "../../middlewares/admin/auth.middleware";
 import PurchaseOrder from "../../models/purchaseOrder.model";
+import Supplier from "../../models/supplier.model";
 
 enum ProductType {
   SIMPLE = "simple",
@@ -1209,19 +1211,98 @@ export const lowQuantity = async (req: Request, res: Response) => {
   }
 };
 
-export const testSocket = async (req: Request, res: Response) => {
+//[GET] /products/trash
+export const trashProducts = async (req: Request, res: Response) => {
   try {
-    const { message } = req.body;
+    let find: any = {
+      deleted: true,
+    };
 
-    const io = getIo();
+    const keyword = req.query.keyword || "";
 
-    io.emit("SERVER_RETURN_TEST", { message });
+    if (keyword) {
+      find.$or = [
+        { title: { $regex: keyword, $options: "si" } },
+        { SKU: { $regex: keyword, $options: "si" } },
+      ];
+    }
+
+    const initPagination = {
+      page: 1,
+      limitItems: 10,
+    };
+
+    if (req.query.limit) {
+      initPagination.limitItems = Number(req.query.limit);
+    }
+
+    const totalRecord = await Product.countDocuments(find);
+
+    const pagination = Pagination(initPagination, req.query, totalRecord);
+
+    const products = await Product.aggregate([
+      { $match: find },
+      {
+        $addFields: {
+          product_id_string: { $toString: "$_id" },
+          categories_object_ids: {
+            $map: {
+              input: "$categories",
+              as: "category",
+              in: { $toObjectId: "$$category" },
+            },
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: "sub-products",
+          localField: "product_id_string",
+          foreignField: "product_id",
+          as: "subProducts",
+        },
+      },
+
+      {
+        $lookup: {
+          from: "categories",
+          localField: "categories_object_ids",
+          foreignField: "_id",
+          as: "categories_info",
+          pipeline: [{ $project: { title: 1 } }],
+        },
+      },
+      {
+        $set: {
+          count_sub_product: { $size: "$subProducts" },
+        },
+      },
+      { $unset: ["subProducts"] },
+      { $skip: pagination.skip },
+      { $limit: pagination.limitItems },
+    ]);
+
+    const supplier_ids = products
+      .filter((it) => it.supplier_id)
+      .map((item) => item.supplier_id);
+
+    const suppliers = await Supplier.find({ _id: { $in: supplier_ids } });
+
+    for (const product of products) {
+      const supplier = suppliers.find((it) => it._id === product.supplier_id);
+      if (supplier) {
+        product.supplierName = supplier.name;
+      } else {
+        product.supplierName = "Unknown";
+      }
+    }
 
     res.json({
       code: 200,
       message: "OK",
       data: {
-        message: `Received message: ${message}`,
+        products,
+        totalRecord,
       },
     });
   } catch (error) {
@@ -1229,5 +1310,430 @@ export const testSocket = async (req: Request, res: Response) => {
       code: 400,
       message: error.message || error,
     });
+  }
+};
+
+//[GET] /products/sub-product-trash
+export const trashSubProducts = async (req: Request, res: Response) => {
+  try {
+    let find: any = {
+      deleted: true,
+    };
+
+    const keyword = req.query.keyword || "";
+
+    if (keyword) {
+      find.$or = [
+        { title: { $regex: keyword, $options: "si" } },
+        { SKU: { $regex: keyword, $options: "si" } },
+      ];
+
+      const product = await Product.find(find);
+
+      if (product && product.length > 0) {
+        find.product_id = { $in: product.map((item) => item._id) };
+      } else {
+        find.product_id = { $in: [] };
+      }
+    }
+
+    const initPagination = {
+      page: 1,
+      limitItems: 10,
+    };
+
+    if (req.query.limit) {
+      initPagination.limitItems = Number(req.query.limit);
+    }
+
+    const totalRecord = await SubProduct.countDocuments(find);
+
+    const pagination = Pagination(initPagination, req.query, totalRecord);
+
+    const subProducts = await SubProduct.find(find)
+      .sort({ createdAt: "desc" })
+      .skip((pagination.page - 1) * pagination.limitItems)
+      .limit(pagination.limitItems)
+      .lean();
+
+    const product_ids = subProducts.map((item) => item.product_id);
+    const sub_ids = subProducts.map((item) => String(item._id));
+
+    const [subOptions, products] = await Promise.all([
+      SubProductOption.find({
+        sub_product_id: { $in: sub_ids },
+      }),
+      Product.find({
+        _id: { $in: product_ids },
+      }),
+    ]);
+
+    const options = await VariationOption.find({
+      _id: { $in: subOptions.map((item) => item.variation_option_id) },
+    });
+
+    for (const sub of subProducts) {
+      const product = products.find((it) => it.id === sub.product_id);
+      if (product) {
+        sub["thumbnail_product"] = product.thumbnail;
+        sub["title"] = product.title;
+      }
+
+      const subOpts = subOptions.filter(
+        (item) => item.sub_product_id === String(sub._id)
+      );
+      if (subOpts && subOpts.length) {
+        const opts = options.filter((item) =>
+          subOpts
+            .map((subOpt) => subOpt.variation_option_id)
+            .includes(String(item._id))
+        );
+        if (opts && opts.length) {
+          sub["options"] = opts;
+        }
+      }
+    }
+
+    res.json({
+      code: 200,
+      message: "OK",
+      data: {
+        subProducts,
+        totalRecord,
+      },
+    });
+  } catch (error) {
+    res.json({
+      code: 400,
+      message: error.message || error,
+    });
+  }
+};
+
+//[PATCH] /products/change-trash/:productId
+export const changeTrashOne = async (req: Request, res: Response) => {
+  try {
+    const product_id = req.params.productId;
+    const type = req.query.type as string;
+    const checkedSubProduct = req.body.checkedSubProduct;
+
+    return await changeTrashOneHelper(
+      product_id,
+      type,
+      checkedSubProduct,
+      req,
+      res,
+      Product,
+      true
+    );
+  } catch (error) {
+    res.json({
+      code: 400,
+      message: error.message || error,
+    });
+  }
+};
+
+//[PATCH] /products/change-sub-product-trash/:subId
+export const changeSubproductTrashOne = async (req: Request, res: Response) => {
+  try {
+    const sub_id = req.params.subId;
+    const type = req.query.type as string;
+
+    return await changeTrashOneHelper(
+      sub_id,
+      type,
+      false,
+      req,
+      res,
+      SubProduct,
+      false
+    );
+  } catch (error) {
+    res.status(400).json({
+      code: 400,
+      message: error.message || error,
+    });
+  }
+};
+
+//[PATCH] /products/bulk-trash
+export const bulkChangeTrash = async (req: Request, res: Response) => {
+  try {
+    const action = req.query.action as string;
+    const ids = req.body.ids;
+    const checkedSubProduct = req.body.checkedSubProduct;
+
+    return await bulkChangeHelper(
+      ids,
+      action,
+      checkedSubProduct,
+      req,
+      res,
+      Product
+    );
+  } catch (error) {
+    res.json({
+      code: 400,
+      message: error.message || error,
+    });
+  }
+};
+
+//[PATCH] /products/bulk-sub-trash
+export const bulkChangeSubProductTrash = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const action = req.query.action as string;
+    const ids = req.body.ids;
+
+    return await bulkChangeHelper(
+      ids,
+      action,
+      false,
+      req,
+      res,
+      SubProduct,
+      "subProduct"
+    );
+  } catch (error) {
+    res.json({
+      code: 400,
+      message: error.message || error,
+    });
+  }
+};
+
+//[PATCH] /products/change-trash-all
+export const changeTrashAll = async (req: Request, res: Response) => {
+  try {
+    const action = req.query.action as string;
+    const checkedSubProduct = req.body.checkedSubProduct as boolean;
+
+    return await changeTrashAllHelper(
+      action,
+      checkedSubProduct,
+      req,
+      res,
+      Product,
+      "product"
+    );
+  } catch (error) {
+    res.json({
+      code: 400,
+      message: error.message || error,
+    });
+  }
+};
+
+//[PATCH] /products/change-sub-trash-all
+export const changeSubProductTrashAll = async (req: Request, res: Response) => {
+  try {
+    const action = req.query.action as string;
+
+    return await changeTrashAllHelper(
+      action,
+      false,
+      req,
+      res,
+      SubProduct,
+      "subProduct"
+    );
+  } catch (error) {
+    res.json({
+      code: 400,
+      message: error.message || error,
+    });
+  }
+};
+
+const changeTrashOneHelper = async (
+  id: string,
+  type: string,
+  checkedSubProduct: boolean,
+  req: Request,
+  res: Response,
+  Model: Model<any>,
+  isProduct: boolean
+) => {
+  try {
+    if (!id) {
+      res.status(400).json({
+        code: 400,
+        message: "Product ID is required",
+      });
+      return;
+    }
+
+    const record = await Model.findOne({ _id: id, deleted: true });
+
+    if (!record) {
+      res.status(404).json({
+        code: 404,
+        message: "Product not found",
+      });
+      return;
+    }
+
+    if (type === "restore") {
+      record.deleted = false;
+      delete record.deletedAt;
+      if (
+        checkedSubProduct &&
+        isProduct &&
+        record.productType === "variations"
+      ) {
+        const subProducts = await SubProduct.find({
+          product_id: record._id,
+          deleted: true,
+        });
+        await Promise.all([
+          SubProductOption.updateMany(
+            { sub_product_id: { $in: subProducts.map((item) => item._id) } },
+            { deleted: false }
+          ),
+          SubProduct.updateMany(
+            { _id: { $in: subProducts.map((item) => item._id) } },
+            { deleted: false }
+          ),
+        ]);
+      }
+      await record.save();
+    } else if (type === "delete") {
+      if (
+        checkedSubProduct &&
+        isProduct &&
+        record.productType === "variations"
+      ) {
+        const subProducts = await SubProduct.find({ product_id: record._id });
+        await Promise.all([
+          SubProductOption.deleteMany({
+            sub_product_id: { $in: subProducts.map((item) => item._id) },
+          }),
+          SubProduct.deleteMany({
+            _id: { $in: subProducts.map((item) => item._id) },
+          }),
+        ]);
+      }
+      await Model.deleteOne({ _id: id });
+    }
+
+    res.json({
+      code: 200,
+      message: `${type === "restore" ? "Restored" : "Deleted"} Successfully`,
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+const bulkChangeHelper = async (
+  ids: string[],
+  action: string,
+  checkedSubProduct: boolean,
+  req: Request,
+  res: Response,
+  Model: Model<any>,
+  type: "product" | "subProduct" = "product"
+) => {
+  try {
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({
+        code: 400,
+        message: "Product IDs are required",
+      });
+      return;
+    }
+
+    const records = await Model.find({ _id: { $in: ids }, deleted: true });
+
+    if (!records || records.length === 0) {
+      res.status(404).json({
+        code: 404,
+        message: "No products found",
+      });
+      return;
+    }
+
+    if (action === "restore") {
+      await Model.updateMany({ _id: { $in: ids } }, { deleted: false });
+      if (checkedSubProduct && type === "product") {
+        const subProducts = await SubProduct.find({
+          product_id: { $in: ids },
+          deleted: true,
+        });
+
+        await Promise.all([
+          SubProductOption.updateMany(
+            { sub_product_id: { $in: subProducts.map((item) => item._id) } },
+            { deleted: false }
+          ),
+          SubProduct.updateMany(
+            { _id: { $in: subProducts.map((item) => item._id) } },
+            { deleted: false }
+          ),
+        ]);
+      }
+    } else if (action === "delete") {
+      await Model.deleteMany({ _id: { $in: ids } });
+      if (checkedSubProduct && type === "product") {
+        const subProducts = await SubProduct.find({ product_id: { $in: ids } });
+        await Promise.all([
+          SubProductOption.deleteMany({
+            sub_product_id: { $in: subProducts.map((item) => item._id) },
+          }),
+          SubProduct.deleteMany({
+            _id: { $in: subProducts.map((item) => item._id) },
+          }),
+        ]);
+      }
+    }
+
+    res.json({
+      code: 200,
+      message: `${action === "restore" ? "Restored" : "Deleted"} Successfully`,
+    });
+  } catch (error) {
+    console.log(error);
+    throw error;
+  }
+};
+
+const changeTrashAllHelper = async (
+  action: string,
+  checkedSubProduct: boolean,
+  req: Request,
+  res: Response,
+  Model: Model<any>,
+  type: "product" | "subProduct" = "product"
+) => {
+  try {
+    if (action === "restore") {
+      await Model.updateMany(
+        { deleted: true },
+        { deleted: false, deletedAt: null }
+      );
+      if (checkedSubProduct && type === "product") {
+        await SubProduct.updateMany(
+          { deleted: true },
+          { deleted: false, deletedAt: null }
+        );
+      }
+    } else if (action === "delete") {
+      await Model.deleteMany({ deleted: true });
+      if (checkedSubProduct && type === "product") {
+        await SubProduct.deleteMany({ deleted: true });
+      }
+    }
+
+    res.json({
+      code: 200,
+      message: `${action === "restore" ? "Restored" : "Deleted"} Successfully`,
+    });
+  } catch (error) {
+    console.log(error);
+    throw error;
   }
 };
