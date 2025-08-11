@@ -170,7 +170,7 @@ const removeSubdomain = (req, res) => __awaiter(void 0, void 0, void 0, function
 exports.removeSubdomain = removeSubdomain;
 const getSettingClient = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const setting = yield setting_model_1.default.findOne({}).select("siteName companyName logoLight logoDark siteFavicon domain description keywords email phone address facebook instagram twitter youtube");
+        const setting = yield setting_model_1.default.findOne({}).select("-smtpHost -smtpPort -smtpUsername -smtpPassword");
         if (!setting) {
             res.status(404).json({
                 code: 404,

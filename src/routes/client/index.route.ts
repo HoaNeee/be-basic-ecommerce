@@ -20,6 +20,13 @@ import suggestRouter from "./suggestion.route";
 import * as settingMiddleware from "../../middlewares/setting.middleware";
 
 const ClientRoute = (app: Express) => {
+  app.use((req, res, next) => {
+    // console.log(process.memoryUsage());
+    if (req.session["createdAt"] === undefined) {
+      req.session["createdAt"] = new Date();
+    }
+    next();
+  });
   app.use(settingMiddleware.setting);
 
   app.use("/auth", authRouter);

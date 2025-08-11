@@ -181,7 +181,7 @@ export const removeSubdomain = async (req: Request, res: Response) => {
 export const getSettingClient = async (req: Request, res: Response) => {
   try {
     const setting = await Setting.findOne({}).select(
-      "siteName companyName logoLight logoDark siteFavicon domain description keywords email phone address facebook instagram twitter youtube"
+      "-smtpHost -smtpPort -smtpUsername -smtpPassword"
     );
     if (!setting) {
       res.status(404).json({

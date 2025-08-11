@@ -56,6 +56,12 @@ const chatbot_route_1 = __importDefault(require("./chatbot.route"));
 const suggestion_route_1 = __importDefault(require("./suggestion.route"));
 const settingMiddleware = __importStar(require("../../middlewares/setting.middleware"));
 const ClientRoute = (app) => {
+    app.use((req, res, next) => {
+        if (req.session["createdAt"] === undefined) {
+            req.session["createdAt"] = new Date();
+        }
+        next();
+    });
     app.use(settingMiddleware.setting);
     app.use("/auth", auth_route_1.default);
     app.use("/categories", category_route_1.default);

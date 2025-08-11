@@ -106,12 +106,6 @@ app.use((0, express_session_1.default)({
         }),
 }));
 app.use(limiter);
-app.use((req, res, next) => {
-    if (req.session["createdAt"] === undefined) {
-        req.session["createdAt"] = new Date();
-    }
-    next();
-});
 (0, index_route_2.default)(app);
 (0, index_route_1.default)(app);
 (0, notification_route_1.default)(app);
