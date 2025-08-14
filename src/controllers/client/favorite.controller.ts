@@ -18,6 +18,17 @@ export const products = async (req: MyRequest, res: Response) => {
 
     const list = await Favorite.findOne({ user_id: user_id, deleted: false });
 
+    if (!list) {
+      res.json({
+        code: 200,
+        message: "OK",
+        data: {
+          products: [],
+        },
+      });
+      return;
+    }
+
     const listBlog = await BlogSaved.findOne({
       user_id: user_id,
       deleted: false,

@@ -163,6 +163,14 @@ const detail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             throw Error("Missing order_no!");
         }
         const order = yield order_model_1.default.findOne({ orderNo: order_no, deleted: false });
+        const user_id = req.userId;
+        if (user_id && order.user_id !== user_id) {
+            res.status(403).json({
+                code: 403,
+                message: "Forbidden",
+            });
+            return;
+        }
         res.json({
             code: 200,
             message: "OK",
@@ -317,9 +325,17 @@ const editBill = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 exports.editBill = editBill;
 const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        const user_id = req.userId;
         const order_id = req.params.id;
         const { status } = req.body;
         const order = yield order_model_1.default.findOne({ _id: order_id });
+        if (user_id && order.user_id !== user_id) {
+            res.status(403).json({
+                code: 403,
+                message: "Forbidden",
+            });
+            return;
+        }
         if (status === "canceled") {
             if (order.status !== "pending") {
                 yield (0, order_1.updateStockWhenOrder)(order, "plus");

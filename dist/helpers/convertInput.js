@@ -1,18 +1,29 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getWordsFilterInput = exports.convertInput = void 0;
-const convertInput = (input) => {
-    function removeVietnameseTones(str) {
-        return (str
+const convertInput = (input, type = 1) => {
+    function convert1(str) {
+        return str
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "")
             .replace(/đ/g, "d")
             .replace(/Đ/g, "D")
-            .trim()
             .replace(/\s+/g, " ")
-            .toLowerCase());
+            .trim()
+            .toLowerCase();
     }
-    return removeVietnameseTones(input);
+    function convert2(str) {
+        return str
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/đ/g, "d")
+            .replace(/Đ/g, "D")
+            .replace(/[^a-zA-Z0-9\s]/g, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
+    }
+    return type === 1 ? convert1(input) : convert2(input);
 };
 exports.convertInput = convertInput;
 const getWordsFilterInput = ({ input, options, type, keys, }) => {

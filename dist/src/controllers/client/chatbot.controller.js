@@ -24,6 +24,9 @@ const user_model_1 = __importDefault(require("../../models/user.model"));
 const product_1 = require("../../../utils/product");
 const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
 const database_1 = require("../../../configs/database");
+const crypto_1 = __importDefault(require("crypto"));
+const textCache_model_1 = __importDefault(require("../../models/textCache.model"));
+const convertInput_1 = require("../../../helpers/convertInput");
 const API_KEY = process.env.GOOGLE_GEM_AI_API_KEY;
 const DOMAIN = process.env.NODE_ENV === "production"
     ? "https://shop.kakrist.site"
@@ -71,6 +74,7 @@ const getHistoryChat = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.getHistoryChat = getHistoryChat;
 const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         if (!API_KEY) {
             res.json({ code: 500, message: "API key is not set" });
@@ -93,9 +97,25 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const action = req.body.action || "ask";
         if (action === "suggest") {
             const type = req.body.type;
+            const cached = yield checkCaching(input);
+            if (cached) {
+                const collection_name = ((_a = cached.query) === null || _a === void 0 ? void 0 : _a.collection_name) || "products";
+                const vector_ids = cached.response;
+                const products = yield getProductWithVectorIds(vector_ids, collection_name);
+                req.session["userState"] = {
+                    lastIntent: "search_product",
+                    new: true,
+                    query: {
+                        input: input,
+                        productType: collection_name === "products" ? "simple" : "variations",
+                        points: vector_ids,
+                    },
+                };
+                return yield promptProduct(req, res, input, chat, type, products);
+            }
             console.log(type, action);
             if (type === "search_product") {
-                const products = yield getProductsWithFields(input, req);
+                const products = yield getProducts(input, {}, req);
                 return yield promptProduct(req, res, input, chat, type, products);
             }
             const product = yield getProductUsingInput(input);
@@ -161,9 +181,29 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.chatBot = chatBot;
 const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b, _c, _d;
     try {
-        const chat = ((_a = chatHistory.get(req.session["sid"])) === null || _a === void 0 ? void 0 : _a.history) || [];
+        const cached = yield checkCaching(input);
+        if (cached) {
+            const intent = ((_a = cached.query) === null || _a === void 0 ? void 0 : _a.intent) || "search_product";
+            if (intent === "search_product") {
+                const collection_name = ((_b = cached.query) === null || _b === void 0 ? void 0 : _b.collection_name) || "products";
+                const products = yield getProductWithVectorIds(cached.response, collection_name);
+                req.session["userState"] = {
+                    lastIntent: intent,
+                    new: false,
+                    query: {
+                        input: input,
+                        productType: collection_name === "products" ? "simple" : "variations",
+                        points: cached.response,
+                    },
+                };
+                yield promptProduct(req, res, input, chatModel, intent, products);
+                return "";
+            }
+            return intent;
+        }
+        const chat = ((_c = chatHistory.get(req.session["sid"])) === null || _c === void 0 ? void 0 : _c.history) || [];
         const formattedChat = formattedChatHelper(chat);
         let userState = req.session["userState"];
         if (!userState) {
@@ -173,7 +213,7 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
             };
             userState = req.session["userState"];
         }
-        const [categoriesMap, optionsMap] = yield getCategoriesAndOptions();
+        const [categoriesMap] = yield getCategoriesAndOptions();
         const classicPrompt = `Bạn là một trợ lý ảo của một trang web bán hàng, người dùng gửi câu sau "${input}"
     
       Dữ liệu tham khảo cho việc phân tích intent:
@@ -190,28 +230,29 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
       - Nếu intent mới khác với intent trước đó của người dùng, hãy cập nhật state của người dùng với intent mới và query mới (nếu có).
       - Dựa vào input của người dùng để xác định "new" (true nếu bạn nghĩ input là một truy vấn mới, false nếu không).
       - Nếu intent mới giống thì hãy cập nhật userState.lastQuery với query mới (nếu là intent dạng search).
+      - Nếu có đề cập đến sản phẩm tương tự thì hãy dựa vào userState.lastQuery để lấy categories tương ứng và trả về nó.
 
       - Dữ liệu tham khảo thêm cho việc cập nhật userState.lastQuery:
       - Hãy nhớ đi theo format đã có của userState.
+      - Hãy giúp tôi convert input sang tiếng anh.
       - Nếu intent là search_product:
         + Danh sách danh mục (dạng: tên:danh_mục_id): ${categoriesMap}
-        + Danh sách tùy chọn biến thể (dạng: tên:option_id): ${optionsMap}
         + Chú ý: 
           - Trường 'userState.query.productType' là "variations" nếu có biến thể, "simple" nếu không, biến thể là các tùy chọn như màu sắc, kích thước.. (nếu có).
           - Nếu có đề cập đến tùy chọn như màu, size..., hãy trả về 'variation_options' là danh sách '_id' phù hợp và productType là "variations".
 
       - Nếu intent là search_blog:
         + Danh sách tags (dạng: tên): ${formattedChat
-            .map((msg) => { var _a; return (_a = msg.data) === null || _a === void 0 ? void 0 : _a.map((item) => item.tags).join(", "); })
+            .map((msg) => { var _a; return (_a = msg.data) === null || _a === void 0 ? void 0 : _a.map((item) => item === null || item === void 0 ? void 0 : item.tags).join(", "); })
             .join(", ")}
         + Danh sách tiêu đề bài viết cho việc dễ match (dạng: tên): ${formattedChat
-            .map((msg) => { var _a; return (_a = msg.data) === null || _a === void 0 ? void 0 : _a.map((item) => item.title).join(", "); })
+            .map((msg) => { var _a; return (_a = msg.data) === null || _a === void 0 ? void 0 : _a.map((item) => item === null || item === void 0 ? void 0 : item.title).join(", "); })
             .join(", ")}
 
       Chỉ trả về dạng JSON như sau: 
       { 
       "intent": "...",
-      "new": true | false, // nếu intent mới khác với intent trước đó của người dùng
+      "new": true | false, // nếu intent mới khác với intent trước đó hoặc input mới bạn thấy khác hẳn input trước
       "query": {
         "input": "${input}",
         "categories": ["id1", "id2"], // nếu có
@@ -229,33 +270,17 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
         const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);
         const object = JSON.parse(output);
         console.log(object);
-        if (object.intent === "search_product") {
+        if ((object === null || object === void 0 ? void 0 : object.intent) === "search_product") {
             if (!object.new) {
-                const qdrantClient = (0, database_1.getQdrantClient)();
                 const points = object.query.points;
-                if (points && points.length > 0) {
-                    if (object.query.productType === "simple") {
-                        const products = yield qdrantClient.retrieve("products", {
-                            ids: points,
-                            with_payload: true,
-                            with_vector: false,
-                        });
-                        return yield promptProduct(req, res, input, chatModel, object.intent, products.map((item) => item.payload));
-                    }
-                    else {
-                        const products = yield qdrantClient.retrieve("sub-products", {
-                            ids: points,
-                            with_payload: true,
-                            with_vector: false,
-                        });
-                        return yield promptProduct(req, res, input, chatModel, object.intent, products.map((item) => {
-                            return Object.assign(Object.assign({}, item.payload), { productType: "variations" });
-                        }));
-                    }
+                if (points && (points === null || points === void 0 ? void 0 : points.length) > 0) {
+                    const productType = ((_d = object === null || object === void 0 ? void 0 : object.query) === null || _d === void 0 ? void 0 : _d.productType) || "simple";
+                    const products = yield getProductWithVectorIds(points, productType === "simple" ? "products" : "sub-products");
+                    return yield promptProduct(req, res, input, chatModel, object.intent, products);
                 }
             }
             else {
-                const products = yield getProducts(input, object.query, req);
+                const products = yield getProducts(object.input || input, object.query, req);
                 yield promptProduct(req, res, input, chatModel, object.intent, products);
             }
             return "";
@@ -271,10 +296,20 @@ const promptProductDetail = (req, res, input, chat, intent, product) => __awaite
     if (!product) {
         product = yield getProductUsingInput(input);
     }
+    if (product) {
+        req.session["userState"] = {
+            lastIntent: intent,
+            new: false,
+            query: {
+                input: input,
+                product: product,
+            },
+        };
+    }
     const prompt = `Bạn là một trợ lý ảo của trang web, dựa vào lịch sử trò chuyện cho việc thông tin chi tiết sản phẩm, hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng.
         - Người dùng gửi câu sau "${input}"
         Dữ liệu tham khảo:
-        - Cho việc phân tích sản phẩm (có thể không có): ${JSON.stringify(product)}
+        - Đây là sản phẩm cho việc phân tích sản phẩm (có thể không có): ${JSON.stringify(product)}
         - Đây là domain của trang web: ${DOMAIN}
         - Nếu không có dữ liệu sản phẩm ở phía trên thì hãy dựa vào lịch sử của đoạn chat để tìm kiếm thông tin sản phẩm.
 
@@ -319,6 +354,7 @@ const promptProduct = (req_1, res_1, input_1, chat_1, intent_1, ...args_1) => __
         - Nếu không có sản phẩm nào phù hợp hãy trả lời khéo và nói rằng không tìm thấy sản phẩm nào phù hợp với yêu cầu của người dùng.
         - Với response hãy trả về dưới dạng thẻ HTML, ví dụ: <p>Đây là sản phẩm phù hợp với yêu cầu của bạn, chúc bạn tìm được sản phẩm ưng ý nhé!</p>
         - Hãy nhớ tên các sản phẩm trong danh sách sản phẩm trên, để phục vụ việc trả lời của bạn, nếu có sản phẩm tên giống nhau hãy nhớ thứ tự của chúng và hỏi rõ lại người dùng muốn hỏi sản phẩm nào.
+        - Hãy nhớ rằng các sản phẩm có thể sẽ không đúng như input, hãy trả lời thêm rằng đó là những sản phẩm có thể bạn thích hoặc tương tự.
         Yêu cầu trả lời đúng format dưới dạng JSON như sau: 
         {
           "intent": "search_product",
@@ -443,20 +479,18 @@ const getBlogs = (input) => __awaiter(void 0, void 0, void 0, function* () {
 });
 const getProductsWithFields = (input, req) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        let [categoriesMap, optionsMap] = yield getCategoriesAndOptions();
+        let [categoriesMap] = yield getCategoriesAndOptions();
         const prompt = `Bạn là một trợ lý ảo của một trang web bán hàng, nhiệm vụ của bạn là phân tích yêu cầu của người dùng và xuất ra dữ liệu có cấu trúc dạng JSON theo mẫu bên dưới. Không cần giải thích gì thêm.
 
     Người dùng hỏi: "${input}"
 
     Dữ liệu tham khảo:
     - Danh sách danh mục (dạng: tên:danh_mục_id): ${categoriesMap}
-    - Danh sách tùy chọn biến thể (dạng: tên:option_id): ${optionsMap}
 
     Yêu cầu:
     - Nếu có nói về mức giá, hãy lấy giá trung bình (price), cùng với khoảng min_price và max_price dao động ±10%
     - Nếu có tên danh mục sản phẩm phù hợp, trả về mảng 'categories' là danh sách '_id' tương ứng
     - Trường 'productType' là "variations" nếu có biến thể, "simple" nếu không, biến thể là các tùy chọn như màu sắc, kích thước.. (nếu có).
-    - Nếu có đề cập đến tùy chọn như màu, size..., hãy trả về 'variation_options' là danh sách '_id' phù hợp
 
     Kết quả trả về chỉ là JSON theo mẫu sau:
 
@@ -501,12 +535,12 @@ const getProducts = (input, object, req) => __awaiter(void 0, void 0, void 0, fu
         });
         const qdrantClient = (0, database_1.getQdrantClient)();
         const filter = {};
-        if (object.categories && object.categories.length > 0) {
+        if ((object === null || object === void 0 ? void 0 : object.categories) && object.categories.length > 0) {
             filter["must"] = [
                 { key: "categories", match: { any: object.categories } },
             ];
         }
-        if (object.minPrice && object.maxPrice) {
+        if ((object === null || object === void 0 ? void 0 : object.minPrice) && (object === null || object === void 0 ? void 0 : object.maxPrice)) {
             const min_price = Number(object.minPrice);
             const max_price = Number(object.maxPrice);
             filter["must"] = [
@@ -532,8 +566,10 @@ const getProducts = (input, object, req) => __awaiter(void 0, void 0, void 0, fu
         }
         console.log(filter);
         const vector = response.embeddings[0].values;
-        if (object.productType === "simple") {
-            const products = yield qdrantClient.search("products", {
+        const newInput = (0, convertInput_1.convertInput)(input, 2);
+        const hash = crypto_1.default.createHash("sha256").update(newInput).digest("hex");
+        if ((object === null || object === void 0 ? void 0 : object.productType) === "variations") {
+            const products = yield qdrantClient.search("sub-products", {
                 vector,
                 filter,
                 limit: 5,
@@ -543,10 +579,15 @@ const getProducts = (input, object, req) => __awaiter(void 0, void 0, void 0, fu
                 lastIntent: "search_product",
                 lastQuery: Object.assign(Object.assign({}, object), { points }),
             };
-            return products.map((item) => item.payload);
+            yield cachedHelper(points, {
+                collection_name: "sub-products",
+                intent: "search_product",
+            }, "", hash, newInput);
+            return products.map((item) => (Object.assign(Object.assign({}, item.payload), { productType: "variations" })));
         }
-        const products = yield qdrantClient.search("sub-products", {
+        const products = yield qdrantClient.search("products", {
             vector,
+            filter,
             limit: 5,
         });
         const points = products.map((item) => item.id);
@@ -554,7 +595,11 @@ const getProducts = (input, object, req) => __awaiter(void 0, void 0, void 0, fu
             lastIntent: "search_product",
             lastQuery: Object.assign(Object.assign({}, object), { points }),
         };
-        return products.map((item) => (Object.assign(Object.assign({}, item.payload), { productType: "variations" })));
+        yield cachedHelper(points, {
+            collection_name: "products",
+            intent: "search_product",
+        }, "", hash, newInput);
+        return products.map((item) => item.payload);
     }
     catch (error) {
         console.error("Error products:", error);
@@ -729,7 +774,7 @@ const messageTalk = (input, chat) => __awaiter(void 0, void 0, void 0, function*
     - Hãy hạn chế sử dụng từ "Xin chào" trong câu trả lời, chỉ sử dụng khi người dùng hỏi về sức khỏe hoặc muốn bắt đầu cuộc trò chuyện.
     - Nếu người dùng muốn trò chuyện, hãy hỗ trợ họ một cách tự nhiên và thân thiện.
     - Hãy linh hoạt trong việc trả lời, không cần phải quá nghiêm túc, hãy tạo cảm giác thoải mái cho người dùng.
-    - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt nhé.
+    - Hãy linh hoạt trong việc chọn ngôn ngữ, nhưng ưu tiên Tiếng việt.
     - Trả kết quả dưới dạng JSON như sau:
     {
       "intent": "small_talk",
@@ -782,6 +827,57 @@ const createOrGetChatHistory = (map, sessionId) => __awaiter(void 0, void 0, voi
     }
     catch (error) {
         console.error("Error creating or getting chat history:", error);
+        throw error;
+    }
+});
+const getProductWithVectorIds = (vector_ids_1, ...args_1) => __awaiter(void 0, [vector_ids_1, ...args_1], void 0, function* (vector_ids, collection_name = "products") {
+    try {
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        const products = yield qdrantClient.retrieve(collection_name, {
+            ids: vector_ids,
+            with_payload: true,
+            with_vector: false,
+        });
+        return products.map((item) => (Object.assign(Object.assign({}, item.payload), { productType: collection_name === "products" ? "simple" : "variations" })));
+    }
+    catch (error) {
+        console.error("Error getting products with vector IDs:", error);
+        throw error;
+    }
+});
+const cachedHelper = (points_1, ...args_1) => __awaiter(void 0, [points_1, ...args_1], void 0, function* (points, query = {}, input, text_hash, text) {
+    try {
+        if (input) {
+            const newInput = (0, convertInput_1.convertInput)(input, 2);
+            const hash = crypto_1.default.createHash("sha256").update(newInput).digest("hex");
+            yield textCache_model_1.default.insertOne({
+                text_hash: hash,
+                text: newInput,
+                response: points,
+                query: query,
+            });
+            return;
+        }
+        yield textCache_model_1.default.insertOne({
+            text_hash: text_hash,
+            text: text,
+            response: points,
+            query: query,
+        });
+    }
+    catch (error) {
+        throw error;
+    }
+});
+const checkCaching = (input) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const newInput = (0, convertInput_1.convertInput)(input, 2);
+        const cached = yield textCache_model_1.default.findOne({
+            text_hash: crypto_1.default.createHash("sha256").update(newInput).digest("hex"),
+        }).lean();
+        return cached;
+    }
+    catch (error) {
         throw error;
     }
 });

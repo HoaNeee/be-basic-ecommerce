@@ -26,6 +26,16 @@ const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user_id = req.userId;
         const list = yield favorite_model_1.default.findOne({ user_id: user_id, deleted: false });
+        if (!list) {
+            res.json({
+                code: 200,
+                message: "OK",
+                data: {
+                    products: [],
+                },
+            });
+            return;
+        }
         const listBlog = yield blogSaved_model_1.default.findOne({
             user_id: user_id,
             deleted: false,

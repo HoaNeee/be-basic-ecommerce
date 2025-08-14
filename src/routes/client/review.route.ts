@@ -17,9 +17,13 @@ router.post(
 router.delete(
   "/delete-comment/:id",
   authMiddleware.isAccess,
-  controller.removeComment
+  controller.removeCommentUser
 );
-router.delete("/delete/:id", authMiddleware.isAccess, controller.removeReview);
+router.delete(
+  "/delete/:id",
+  authMiddleware.isAccess,
+  controller.removeReviewUser
+);
 
 const reviewRouter = router;
 export default reviewRouter;

@@ -100,6 +100,7 @@ export const create = async (req: MyRequest, res: Response) => {
 export const edit = async (req: MyRequest, res: Response) => {
   try {
     const address_id = req.params.id;
+    const user_id = req.userId;
 
     if (!address_id) {
       throw Error("Missing address_id");
@@ -107,10 +108,18 @@ export const edit = async (req: MyRequest, res: Response) => {
     const body = req.body;
     const isDefault = body.isDefault;
 
-    const address = await Address.findOne({ _id: address_id, deleted: false });
+    const address = await Address.findOne({
+      _id: address_id,
+      user_id,
+      deleted: false,
+    });
 
     if (!address) {
-      throw Error("Address not found!");
+      res.status(404).json({
+        code: 404,
+        message: "Address not found!",
+      });
+      return;
     }
 
     if (isDefault && !address.isDefault) {
@@ -139,15 +148,24 @@ export const edit = async (req: MyRequest, res: Response) => {
 export const remove = async (req: MyRequest, res: Response) => {
   try {
     const address_id = req.params.id;
+    const user_id = req.userId;
 
     if (!address_id) {
       throw Error("Missing address_id");
     }
 
-    const address = await Address.findOne({ _id: address_id, deleted: false });
+    const address = await Address.findOne({
+      _id: address_id,
+      user_id,
+      deleted: false,
+    });
 
     if (!address) {
-      throw Error("Address not found!");
+      res.status(404).json({
+        code: 404,
+        message: "Address not found!",
+      });
+      return;
     }
 
     if (address.isDefault) {

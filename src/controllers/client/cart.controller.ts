@@ -105,10 +105,19 @@ export const getCart = async (req: MyRequest, res: Response) => {
 export const addProduct = async (req: MyRequest, res: Response) => {
   try {
     const cart_id = req.params.cartId;
+    const cart_id_in_session = req.cartId;
     const { productType } = req.body;
 
     if (!cart_id) {
       throw Error("Missing cart_id");
+    }
+
+    if (cart_id !== cart_id_in_session) {
+      res.status(403).json({
+        code: 403,
+        message: "Forbidden",
+      });
+      return;
     }
 
     const body = req.body;
@@ -180,14 +189,18 @@ export const addProduct = async (req: MyRequest, res: Response) => {
 export const updateQuantity = async (req: MyRequest, res: Response) => {
   try {
     const cartItem_id = req.params.cartItemId;
-
+    const cart_id = req.cartId;
     const quantity = req.body.quantity;
 
     if (!cartItem_id) {
       throw Error("Missing cart_item_id!");
     }
 
-    const cart = await CartDetail.findOne({ _id: cartItem_id });
+    const cart = await CartDetail.findOne({ _id: cartItem_id, cart_id });
+
+    if (!cart) {
+      throw Error("Cart item not found!");
+    }
 
     cart.quantity += quantity;
     await cart.save();
@@ -210,6 +223,7 @@ export const updateQuantity = async (req: MyRequest, res: Response) => {
 export const changeSubProduct = async (req: MyRequest, res: Response) => {
   try {
     const cartItem_id = req.params.cartItemId;
+    const cart_id = req.cartId;
 
     const body = req.body;
 
@@ -217,7 +231,11 @@ export const changeSubProduct = async (req: MyRequest, res: Response) => {
       throw Error("Missing cart_item_id!");
     }
 
-    const cart = await CartDetail.findOne({ _id: cartItem_id });
+    const cart = await CartDetail.findOne({ _id: cartItem_id, cart_id });
+
+    if (!cart) {
+      throw Error("Cart item not found!");
+    }
 
     cart.sub_product_id = body._id;
     cart.options = [...body.options];
@@ -242,12 +260,13 @@ export const changeSubProduct = async (req: MyRequest, res: Response) => {
 export const remove = async (req: MyRequest, res: Response) => {
   try {
     const cartItem_id = req.params.cartItemId;
+    const cart_id = req.cartId;
 
     if (!cartItem_id) {
       throw Error("Missing cart_item_id!");
     }
 
-    await CartDetail.deleteOne({ _id: cartItem_id });
+    await CartDetail.deleteOne({ _id: cartItem_id, cart_id });
 
     res.json({
       code: 200,

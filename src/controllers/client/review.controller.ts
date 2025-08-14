@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { MyRequest } from "../../middlewares/client/auth.middleware";
-import Address from "../../models/address.model";
 import Review from "../../models/review.model";
 import Comment from "../../models/comment.model";
 import Customer from "../../models/customer.model";
@@ -158,29 +157,7 @@ export const createComment = async (req: MyRequest, res: Response) => {
 // [PATCH] /reviews/edit/:id
 export const edit = async (req: MyRequest, res: Response) => {
   try {
-    const address_id = req.params.id;
-
-    if (!address_id) {
-      throw Error("Missing address_id");
-    }
-    const body = req.body;
-    const isDefault = body.isDefault;
-
-    const address = await Address.findOne({ _id: address_id, deleted: false });
-
-    if (!address) {
-      throw Error("Address not found!");
-    }
-
-    if (isDefault && !address.isDefault) {
-      await Address.updateMany(
-        { user_id: address.user_id, deleted: false },
-        { isDefault: false }
-      );
-    }
-
-    await Address.updateOne({ _id: address_id }, body);
-
+    //Do something...
     res.json({
       code: 200,
       message: "Updated!",
@@ -195,16 +172,17 @@ export const edit = async (req: MyRequest, res: Response) => {
 };
 
 // [DELETE] /reviews/delete-comment/:id
-export const removeComment = async (req: MyRequest, res: Response) => {
+export const removeCommentUser = async (req: MyRequest, res: Response) => {
   try {
     const comment_id = req.params.id;
+    const user_id = req.userId;
 
     if (!comment_id) {
       throw Error("Missing comment_id");
     }
 
     await Comment.deleteMany({ parent_id: comment_id });
-    await Comment.deleteOne({ _id: comment_id });
+    await Comment.deleteOne({ _id: comment_id, user_id });
 
     res.json({
       code: 200,
@@ -220,16 +198,17 @@ export const removeComment = async (req: MyRequest, res: Response) => {
 };
 
 // [DELETE] /reviews/delete/:id
-export const removeReview = async (req: MyRequest, res: Response) => {
+export const removeReviewUser = async (req: MyRequest, res: Response) => {
   try {
     const review_id = req.params.id;
+    const user_id = req.userId;
 
     if (!review_id) {
       throw Error("Missing review_id");
     }
 
     await Comment.deleteMany({ review_id: review_id });
-    await Review.deleteOne({ _id: review_id });
+    await Review.deleteOne({ _id: review_id, user_id });
 
     res.json({
       code: 200,

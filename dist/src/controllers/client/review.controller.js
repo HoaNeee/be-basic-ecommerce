@@ -12,8 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.topReviews = exports.removeReview = exports.removeComment = exports.edit = exports.createComment = exports.create = exports.getComments = exports.reviews = void 0;
-const address_model_1 = __importDefault(require("../../models/address.model"));
+exports.topReviews = exports.removeReviewUser = exports.removeCommentUser = exports.edit = exports.createComment = exports.create = exports.getComments = exports.reviews = void 0;
 const review_model_1 = __importDefault(require("../../models/review.model"));
 const comment_model_1 = __importDefault(require("../../models/comment.model"));
 const customer_model_1 = __importDefault(require("../../models/customer.model"));
@@ -147,20 +146,6 @@ const createComment = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 exports.createComment = createComment;
 const edit = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const address_id = req.params.id;
-        if (!address_id) {
-            throw Error("Missing address_id");
-        }
-        const body = req.body;
-        const isDefault = body.isDefault;
-        const address = yield address_model_1.default.findOne({ _id: address_id, deleted: false });
-        if (!address) {
-            throw Error("Address not found!");
-        }
-        if (isDefault && !address.isDefault) {
-            yield address_model_1.default.updateMany({ user_id: address.user_id, deleted: false }, { isDefault: false });
-        }
-        yield address_model_1.default.updateOne({ _id: address_id }, body);
         res.json({
             code: 200,
             message: "Updated!",
@@ -175,14 +160,15 @@ const edit = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.edit = edit;
-const removeComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const removeCommentUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const comment_id = req.params.id;
+        const user_id = req.userId;
         if (!comment_id) {
             throw Error("Missing comment_id");
         }
         yield comment_model_1.default.deleteMany({ parent_id: comment_id });
-        yield comment_model_1.default.deleteOne({ _id: comment_id });
+        yield comment_model_1.default.deleteOne({ _id: comment_id, user_id });
         res.json({
             code: 200,
             message: "Deleted!",
@@ -196,15 +182,16 @@ const removeComment = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         });
     }
 });
-exports.removeComment = removeComment;
-const removeReview = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+exports.removeCommentUser = removeCommentUser;
+const removeReviewUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const review_id = req.params.id;
+        const user_id = req.userId;
         if (!review_id) {
             throw Error("Missing review_id");
         }
         yield comment_model_1.default.deleteMany({ review_id: review_id });
-        yield review_model_1.default.deleteOne({ _id: review_id });
+        yield review_model_1.default.deleteOne({ _id: review_id, user_id });
         res.json({
             code: 200,
             message: "Deleted!",
@@ -218,7 +205,7 @@ const removeReview = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         });
     }
 });
-exports.removeReview = removeReview;
+exports.removeReviewUser = removeReviewUser;
 const topReviews = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const totalRecord = yield review_model_1.default.countDocuments({ deleted: false });

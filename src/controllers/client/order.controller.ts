@@ -192,6 +192,15 @@ export const detail = async (req: MyRequest, res: Response) => {
 
     const order = await Order.findOne({ orderNo: order_no, deleted: false });
 
+    const user_id = req.userId;
+    if (user_id && order.user_id !== user_id) {
+      res.status(403).json({
+        code: 403,
+        message: "Forbidden",
+      });
+      return;
+    }
+
     res.json({
       code: 200,
       message: "OK",
@@ -390,13 +399,21 @@ export const editBill = async (req: MyRequest, res: Response) => {
 // [PATCH] /orders/change-status/:id
 export const changeStatus = async (req: MyRequest, res: Response) => {
   try {
-    // const user_id = req.userId;
+    const user_id = req.userId;
 
     const order_id = req.params.id;
 
     const { status } = req.body;
 
     const order = await Order.findOne({ _id: order_id });
+
+    if (user_id && order.user_id !== user_id) {
+      res.status(403).json({
+        code: 403,
+        message: "Forbidden",
+      });
+      return;
+    }
 
     if (status === "canceled") {
       if (order.status !== "pending") {

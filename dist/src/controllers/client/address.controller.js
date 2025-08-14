@@ -95,14 +95,23 @@ exports.create = create;
 const edit = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const address_id = req.params.id;
+        const user_id = req.userId;
         if (!address_id) {
             throw Error("Missing address_id");
         }
         const body = req.body;
         const isDefault = body.isDefault;
-        const address = yield address_model_1.default.findOne({ _id: address_id, deleted: false });
+        const address = yield address_model_1.default.findOne({
+            _id: address_id,
+            user_id,
+            deleted: false,
+        });
         if (!address) {
-            throw Error("Address not found!");
+            res.status(404).json({
+                code: 404,
+                message: "Address not found!",
+            });
+            return;
         }
         if (isDefault && !address.isDefault) {
             yield address_model_1.default.updateMany({ user_id: address.user_id, deleted: false }, { isDefault: false });
@@ -125,12 +134,21 @@ exports.edit = edit;
 const remove = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const address_id = req.params.id;
+        const user_id = req.userId;
         if (!address_id) {
             throw Error("Missing address_id");
         }
-        const address = yield address_model_1.default.findOne({ _id: address_id, deleted: false });
+        const address = yield address_model_1.default.findOne({
+            _id: address_id,
+            user_id,
+            deleted: false,
+        });
         if (!address) {
-            throw Error("Address not found!");
+            res.status(404).json({
+                code: 404,
+                message: "Address not found!",
+            });
+            return;
         }
         if (address.isDefault) {
             yield address_model_1.default.deleteOne({ _id: address_id });

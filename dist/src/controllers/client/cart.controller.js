@@ -103,9 +103,17 @@ exports.getCart = getCart;
 const addProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const cart_id = req.params.cartId;
+        const cart_id_in_session = req.cartId;
         const { productType } = req.body;
         if (!cart_id) {
             throw Error("Missing cart_id");
+        }
+        if (cart_id !== cart_id_in_session) {
+            res.status(403).json({
+                code: 403,
+                message: "Forbidden",
+            });
+            return;
         }
         const body = req.body;
         let cart;
@@ -163,11 +171,15 @@ exports.addProduct = addProduct;
 const updateQuantity = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const cartItem_id = req.params.cartItemId;
+        const cart_id = req.cartId;
         const quantity = req.body.quantity;
         if (!cartItem_id) {
             throw Error("Missing cart_item_id!");
         }
-        const cart = yield cartDetail_model_1.default.findOne({ _id: cartItem_id });
+        const cart = yield cartDetail_model_1.default.findOne({ _id: cartItem_id, cart_id });
+        if (!cart) {
+            throw Error("Cart item not found!");
+        }
         cart.quantity += quantity;
         yield cart.save();
         res.json({
@@ -188,11 +200,15 @@ exports.updateQuantity = updateQuantity;
 const changeSubProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const cartItem_id = req.params.cartItemId;
+        const cart_id = req.cartId;
         const body = req.body;
         if (!cartItem_id) {
             throw Error("Missing cart_item_id!");
         }
-        const cart = yield cartDetail_model_1.default.findOne({ _id: cartItem_id });
+        const cart = yield cartDetail_model_1.default.findOne({ _id: cartItem_id, cart_id });
+        if (!cart) {
+            throw Error("Cart item not found!");
+        }
         cart.sub_product_id = body._id;
         cart.options = [...body.options];
         yield cart.save();
@@ -214,10 +230,11 @@ exports.changeSubProduct = changeSubProduct;
 const remove = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const cartItem_id = req.params.cartItemId;
+        const cart_id = req.cartId;
         if (!cartItem_id) {
             throw Error("Missing cart_item_id!");
         }
-        yield cartDetail_model_1.default.deleteOne({ _id: cartItem_id });
+        yield cartDetail_model_1.default.deleteOne({ _id: cartItem_id, cart_id });
         res.json({
             code: 200,
             message: "Success!!",

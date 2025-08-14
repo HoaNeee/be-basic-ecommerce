@@ -6,6 +6,7 @@ import { Setting } from "../../types/setting.types";
 export interface MyRequest extends Request {
   userId: string;
   setting?: Setting;
+  cartId: string;
 }
 
 export const isAccess = async (
