@@ -12,20 +12,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.chatBot = exports.getHistoryChat = exports.testAPI2 = exports.testAPI = void 0;
+exports.chatBot = exports.getHistoryChat = exports.testAPI = void 0;
 const genai_1 = require("@google/genai");
 const category_model_1 = __importDefault(require("../../models/category.model"));
 const variation_model_1 = __importDefault(require("../../models/variation.model"));
 const variationOption_model_1 = __importDefault(require("../../models/variationOption.model"));
 const product_model_1 = __importDefault(require("../../models/product.model"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
-const subProductOption_model_1 = __importDefault(require("../../models/subProductOption.model"));
 const blog_model_1 = __importDefault(require("../../models/blog.model"));
 const user_model_1 = __importDefault(require("../../models/user.model"));
 const product_1 = require("../../../utils/product");
 const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
 const database_1 = require("../../../configs/database");
-const AIAssistant_controller_1 = require("../admin/AIAssistant.controller");
 const API_KEY = process.env.GOOGLE_GEM_AI_API_KEY;
 const DOMAIN = process.env.NODE_ENV === "production"
     ? "https://shop.kakrist.site"
@@ -33,34 +31,6 @@ const DOMAIN = process.env.NODE_ENV === "production"
 const gemAI = new genai_1.GoogleGenAI({ apiKey: API_KEY });
 const testAPI = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const products = yield product_model_1.default.find({ deleted: false });
-        const product_ids = products.map((item) => item.id);
-        const subProducts = yield subProduct_model_1.default.find({
-            product_id: { $in: product_ids },
-            deleted: false,
-        }).lean();
-        const sub_ids = subProducts.map((item) => String(item._id));
-        const subOptions = yield subProductOption_model_1.default.find({
-            sub_product_id: { $in: sub_ids },
-            deleted: false,
-        });
-        const newProducts = products.slice(200);
-        let cnt = 0;
-        for (const product of newProducts) {
-            ++cnt;
-            console.log(cnt);
-            if (product.productType === "variations") {
-                const subs = subProducts.filter((item) => item.product_id === String(product._id));
-                if (subs.length > 0) {
-                    const sub_options = subOptions.filter((item) => subs
-                        .map((it) => String(it._id))
-                        .includes(String(item.sub_product_id)));
-                    if (sub_options.length > 0) {
-                        yield (0, AIAssistant_controller_1.embedingProduct)(product, subs, sub_options);
-                    }
-                }
-            }
-        }
         res.status(200).json({
             code: 200,
             message: "Test API OK!",
@@ -75,77 +45,6 @@ const testAPI = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.testAPI = testAPI;
-const testAPI2 = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const qdrantClient = (0, database_1.getQdrantClient)();
-        const input = "Tôi đang muốn tìm 1 cái áo";
-        const response = yield gemAI.models.embedContent({
-            model: "gemini-embedding-001",
-            contents: input,
-            config: {
-                outputDimensionality: 1536,
-            },
-        });
-        const vector = response.embeddings[0].values;
-        const max_price = 50000000, min_price = 1000;
-        let filter = {};
-        filter["should"] = [{ key: "categories", match: { any: [] } }];
-        filter["should"] = [
-            ...filter["should"],
-            {
-                should: [
-                    {
-                        key: "price",
-                        range: { gte: min_price, lte: max_price },
-                    },
-                    {
-                        must: [
-                            { key: "min_price", range: { gte: min_price } },
-                            { key: "max_price", range: { lte: max_price } },
-                        ],
-                    },
-                ],
-            },
-        ];
-        const result = yield qdrantClient.search("products", {
-            vector,
-            filter: {
-                should: [
-                    {
-                        key: "price",
-                        range: { gte: min_price, lte: max_price },
-                    },
-                    {
-                        must: [
-                            {
-                                key: "min_price",
-                                range: { gte: min_price },
-                            },
-                            {
-                                key: "max_price",
-                                range: { lte: max_price },
-                            },
-                        ],
-                    },
-                ],
-            },
-        });
-        res.status(200).json({
-            code: 200,
-            message: "Test API OK!",
-            data: result,
-            filter,
-        });
-    }
-    catch (error) {
-        console.log(error);
-        res.status(500).json({
-            code: 500,
-            message: error.message || error,
-        });
-    }
-});
-exports.testAPI2 = testAPI2;
 const chatHistory = new Map();
 const getHistoryChat = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;

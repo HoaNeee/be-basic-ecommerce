@@ -21,7 +21,6 @@ const chatMiddleware = (req: MyRequest, res: Response, next: NextFunction) => {
 };
 
 router.post("/test-api", controller.testAPI);
-router.post("/test-api-2", controller.testAPI2);
 
 router.get("/history", controller.getHistoryChat);
 router.post("/", chatMiddleware, controller.chatBot);
