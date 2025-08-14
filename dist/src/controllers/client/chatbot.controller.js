@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.chatBot = exports.getHistoryChat = void 0;
+exports.chatBot = exports.getHistoryChat = exports.testAPI2 = exports.testAPI = void 0;
 const genai_1 = require("@google/genai");
 const category_model_1 = __importDefault(require("../../models/category.model"));
 const variation_model_1 = __importDefault(require("../../models/variation.model"));
@@ -20,16 +20,132 @@ const variationOption_model_1 = __importDefault(require("../../models/variationO
 const product_model_1 = __importDefault(require("../../models/product.model"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const subProductOption_model_1 = __importDefault(require("../../models/subProductOption.model"));
-const groupBy_1 = require("../../../helpers/groupBy");
 const blog_model_1 = __importDefault(require("../../models/blog.model"));
 const user_model_1 = __importDefault(require("../../models/user.model"));
 const product_1 = require("../../../utils/product");
 const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
+const database_1 = require("../../../configs/database");
+const AIAssistant_controller_1 = require("../admin/AIAssistant.controller");
 const API_KEY = process.env.GOOGLE_GEM_AI_API_KEY;
 const DOMAIN = process.env.NODE_ENV === "production"
     ? "https://shop.kakrist.site"
     : "http://localhost:3000";
 const gemAI = new genai_1.GoogleGenAI({ apiKey: API_KEY });
+const testAPI = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const products = yield product_model_1.default.find({ deleted: false });
+        const product_ids = products.map((item) => item.id);
+        const subProducts = yield subProduct_model_1.default.find({
+            product_id: { $in: product_ids },
+            deleted: false,
+        }).lean();
+        const sub_ids = subProducts.map((item) => String(item._id));
+        const subOptions = yield subProductOption_model_1.default.find({
+            sub_product_id: { $in: sub_ids },
+            deleted: false,
+        });
+        const newProducts = products.slice(200);
+        let cnt = 0;
+        for (const product of newProducts) {
+            ++cnt;
+            console.log(cnt);
+            if (product.productType === "variations") {
+                const subs = subProducts.filter((item) => item.product_id === String(product._id));
+                if (subs.length > 0) {
+                    const sub_options = subOptions.filter((item) => subs
+                        .map((it) => String(it._id))
+                        .includes(String(item.sub_product_id)));
+                    if (sub_options.length > 0) {
+                        yield (0, AIAssistant_controller_1.embedingProduct)(product, subs, sub_options);
+                    }
+                }
+            }
+        }
+        res.status(200).json({
+            code: 200,
+            message: "Test API OK!",
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.testAPI = testAPI;
+const testAPI2 = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        const input = "Tôi đang muốn tìm 1 cái áo";
+        const response = yield gemAI.models.embedContent({
+            model: "gemini-embedding-001",
+            contents: input,
+            config: {
+                outputDimensionality: 1536,
+            },
+        });
+        const vector = response.embeddings[0].values;
+        const max_price = 50000000, min_price = 1000;
+        let filter = {};
+        filter["should"] = [{ key: "categories", match: { any: [] } }];
+        filter["should"] = [
+            ...filter["should"],
+            {
+                should: [
+                    {
+                        key: "price",
+                        range: { gte: min_price, lte: max_price },
+                    },
+                    {
+                        must: [
+                            { key: "min_price", range: { gte: min_price } },
+                            { key: "max_price", range: { lte: max_price } },
+                        ],
+                    },
+                ],
+            },
+        ];
+        const result = yield qdrantClient.search("products", {
+            vector,
+            filter: {
+                should: [
+                    {
+                        key: "price",
+                        range: { gte: min_price, lte: max_price },
+                    },
+                    {
+                        must: [
+                            {
+                                key: "min_price",
+                                range: { gte: min_price },
+                            },
+                            {
+                                key: "max_price",
+                                range: { lte: max_price },
+                            },
+                        ],
+                    },
+                ],
+            },
+        });
+        res.status(200).json({
+            code: 200,
+            message: "Test API OK!",
+            data: result,
+            filter,
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.testAPI2 = testAPI2;
 const chatHistory = new Map();
 const getHistoryChat = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
@@ -96,10 +212,12 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     categories: product.categories || [],
                     productType: "simple",
                 };
-                const similar_products = yield getProducts(object, req);
-                return yield promptProduct(req, res, input, chat, type, similar_products);
+                const similar_products = yield getProducts(input, object, req);
+                return yield promptProduct(req, res, input, chat, "search_product", similar_products);
             }
-            return yield promptProductDetail(req, res, input, chat, type, product);
+            if (type === "product_detail") {
+                return yield promptProductDetail(req, res, input, chat, type, product);
+            }
         }
         const intent = yield getIntent(input, req, res, chat);
         console.log("intent", intent);
@@ -107,9 +225,6 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             return;
         }
         switch (intent) {
-            case "search_product":
-                const products = yield getProductsWithFields(input, req);
-                return yield promptProduct(req, res, input, chat, intent, products);
             case "product_detail":
                 return yield promptProductDetail(req, res, input, chat, intent);
             case "search_blog":
@@ -173,17 +288,16 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
       - "search_blog": Tìm kiếm bài viết
       - "guide_website": Hướng dẫn sử dụng website, ví dụ như: đi tới trang sản phẩm, trang giỏ hàng, trang thanh toán, trang đăng nhập, trang đăng ký, trang chi tiết sản phẩm, "tôi muốn biết trang đơn hàng của tôi ở đâu, tôi muốn biết chỉnh theme thế nào"
 
-      - Nếu intent mới khác với intent trước đó của người dùng, hãy cập nhật state của người dùng với intent mới và query mới (nếu có) và "new" là true.
+      - Nếu intent mới khác với intent trước đó của người dùng, hãy cập nhật state của người dùng với intent mới và query mới (nếu có).
+      - Dựa vào input của người dùng để xác định "new" (true nếu bạn nghĩ input là một truy vấn mới, false nếu không).
       - Nếu intent mới giống thì hãy cập nhật userState.lastQuery với query mới (nếu là intent dạng search).
 
       - Dữ liệu tham khảo thêm cho việc cập nhật userState.lastQuery:
       - Hãy nhớ đi theo format đã có của userState.
-      - Dựa vào input của người dùng để trích xuất các thông tin cần thiết (thêm, cập nhật, xóa field).
       - Nếu intent là search_product:
         + Danh sách danh mục (dạng: tên:danh_mục_id): ${categoriesMap}
         + Danh sách tùy chọn biến thể (dạng: tên:option_id): ${optionsMap}
         + Chú ý: 
-          - Bạn có thể trích xuất tiêu đề sản phẩm nếu có (title nếu là tiếng việt thì chuyển sang tiếng anh, và nên để tối đa 1 từ mà bạn thấy có thể search ví dụ: Đôi giày Nike xịn -> "shoes" hoặc "Nike", Áo thun đẹp -> "tshirt").
           - Trường 'userState.query.productType' là "variations" nếu có biến thể, "simple" nếu không, biến thể là các tùy chọn như màu sắc, kích thước.. (nếu có).
           - Nếu có đề cập đến tùy chọn như màu, size..., hãy trả về 'variation_options' là danh sách '_id' phù hợp và productType là "variations".
 
@@ -195,15 +309,17 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
             .map((msg) => { var _a; return (_a = msg.data) === null || _a === void 0 ? void 0 : _a.map((item) => item.title).join(", "); })
             .join(", ")}
 
-      Chỉ trả về dạng JSON: 
+      Chỉ trả về dạng JSON như sau: 
       { 
       "intent": "...",
       "new": true | false, // nếu intent mới khác với intent trước đó của người dùng
       "query": {
-        "title": "...", // nếu có
+        "input": "${input}",
         "categories": ["id1", "id2"], // nếu có
-        "productType": "variations" | "simple" // nếu có với search_product
-        "variation_options": ["id3", "id4"], // nếu có
+        "productType": "simple" | "variations",
+        "price": "100000", // nếu có (dựa vào input)
+        "minPrice": "50000", // nếu có (dựa vào input)
+        "maxPrice": "200000", // nếu có (dựa vào input)
         "tags": ["tag1", "tag2"] // nếu có với search_blog,
       }
     `;
@@ -214,9 +330,33 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
         const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);
         const object = JSON.parse(output);
         console.log(object);
-        if (!object.new && object.intent === "search_product") {
-            if (object.intent === "search_product") {
-                const products = yield getProducts(object.query, req);
+        if (object.intent === "search_product") {
+            if (!object.new) {
+                const qdrantClient = (0, database_1.getQdrantClient)();
+                const points = object.query.points;
+                if (points && points.length > 0) {
+                    if (object.query.productType === "simple") {
+                        const products = yield qdrantClient.retrieve("products", {
+                            ids: points,
+                            with_payload: true,
+                            with_vector: false,
+                        });
+                        return yield promptProduct(req, res, input, chatModel, object.intent, products.map((item) => item.payload));
+                    }
+                    else {
+                        const products = yield qdrantClient.retrieve("sub-products", {
+                            ids: points,
+                            with_payload: true,
+                            with_vector: false,
+                        });
+                        return yield promptProduct(req, res, input, chatModel, object.intent, products.map((item) => {
+                            return Object.assign(Object.assign({}, item.payload), { productType: "variations" });
+                        }));
+                    }
+                }
+            }
+            else {
+                const products = yield getProducts(input, object.query, req);
                 yield promptProduct(req, res, input, chatModel, object.intent, products);
             }
             return "";
@@ -234,7 +374,7 @@ const promptProductDetail = (req, res, input, chat, intent, product) => __awaite
     }
     const prompt = `Bạn là một trợ lý ảo của trang web, dựa vào lịch sử trò chuyện cho việc thông tin chi tiết sản phẩm, hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng.
         - Người dùng gửi câu sau "${input}"
-        Dữ liệu tham khảo
+        Dữ liệu tham khảo:
         - Cho việc phân tích sản phẩm (có thể không có): ${JSON.stringify(product)}
         - Đây là domain của trang web: ${DOMAIN}
         - Nếu không có dữ liệu sản phẩm ở phía trên thì hãy dựa vào lịch sử của đoạn chat để tìm kiếm thông tin sản phẩm.
@@ -414,7 +554,6 @@ const getProductsWithFields = (input, req) => __awaiter(void 0, void 0, void 0, 
     - Danh sách tùy chọn biến thể (dạng: tên:option_id): ${optionsMap}
 
     Yêu cầu:
-    - Trích xuất tiêu đề sản phẩm nếu có (title nếu là tiếng việt thì chuyển sang tiếng anh, và nên để tối đa 1 từ mà bạn thấy có thể search ví dụ: Đôi giày Nike xịn -> "shoes" hoặc "Nike", Áo thun đẹp -> "tshirt")
     - Nếu có nói về mức giá, hãy lấy giá trung bình (price), cùng với khoảng min_price và max_price dao động ±10%
     - Nếu có tên danh mục sản phẩm phù hợp, trả về mảng 'categories' là danh sách '_id' tương ứng
     - Trường 'productType' là "variations" nếu có biến thể, "simple" nếu không, biến thể là các tùy chọn như màu sắc, kích thước.. (nếu có).
@@ -423,23 +562,19 @@ const getProductsWithFields = (input, req) => __awaiter(void 0, void 0, void 0, 
     Kết quả trả về chỉ là JSON theo mẫu sau:
 
     {
-      "title": "...",
-      "productType": "variations",
       "price": "100",
       "min_price": "95",
       "max_price": "105",
       "categories": ["id1", "id2"],
-      "variation_options": ["id3", "id4"]
+      "productType": "simple",
     }
     hoặc
     {
-      "title": "...",
-      "productType": "simple",
       "price": "100",
       "min_price": "95",
       "max_price": "105",
       "categories": ["id1", "id2"],
-      "variation_options": []
+      "productType": "variations",
     }
    
     `;
@@ -449,46 +584,78 @@ const getProductsWithFields = (input, req) => __awaiter(void 0, void 0, void 0, 
         });
         const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);
         const object = JSON.parse(output);
-        return yield getProducts(object, req);
+        return yield getProducts(input, object, req);
     }
     catch (error) {
         console.error("Error products:", error);
         throw error;
     }
 });
-const getProducts = (object, req) => __awaiter(void 0, void 0, void 0, function* () {
+const getProducts = (input, object, req) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        let find = {
-            deleted: false,
-        };
-        if (object.title) {
-            find.$text = { $search: object.title };
-        }
+        const response = yield gemAI.models.embedContent({
+            model: "gemini-embedding-001",
+            contents: input,
+            config: {
+                outputDimensionality: 1536,
+            },
+        });
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        const filter = {};
         if (object.categories && object.categories.length > 0) {
-            find.categories = { $in: object.categories };
+            filter["must"] = [
+                { key: "categories", match: { any: object.categories } },
+            ];
         }
-        if (object.price || object.min_price || object.max_price) {
-            find.$or = [
-                { price: Number(object.price) },
+        if (object.minPrice && object.maxPrice) {
+            const min_price = Number(object.minPrice);
+            const max_price = Number(object.maxPrice);
+            filter["must"] = [
+                ...filter["must"],
                 {
-                    price: {
-                        $gte: Number(object.min_price) || 0,
-                        $lte: Number(object.max_price) || 10000000000,
-                    },
+                    should: [
+                        {
+                            key: "price",
+                            range: {
+                                gte: min_price,
+                                lte: max_price,
+                            },
+                        },
+                        {
+                            must: [
+                                { key: "min_price", range: { gte: min_price } },
+                                { key: "max_price", range: { lte: max_price } },
+                            ],
+                        },
+                    ],
                 },
             ];
         }
+        console.log(filter);
+        const vector = response.embeddings[0].values;
+        if (object.productType === "simple") {
+            const products = yield qdrantClient.search("products", {
+                vector,
+                filter,
+                limit: 5,
+            });
+            const points = products.map((item) => item.id);
+            req.session["userState"] = {
+                lastIntent: "search_product",
+                lastQuery: Object.assign(Object.assign({}, object), { points }),
+            };
+            return products.map((item) => item.payload);
+        }
+        const products = yield qdrantClient.search("sub-products", {
+            vector,
+            limit: 5,
+        });
+        const points = products.map((item) => item.id);
         req.session["userState"] = {
             lastIntent: "search_product",
-            lastQuery: object,
+            lastQuery: Object.assign(Object.assign({}, object), { points }),
         };
-        if (object.productType === "simple") {
-            const products = yield handleProductSimple(find, req);
-            return products;
-        }
-        find.productType = "variations";
-        const products = yield handleProductVariations(find, object, req);
-        return products;
+        return products.map((item) => (Object.assign(Object.assign({}, item.payload), { productType: "variations" })));
     }
     catch (error) {
         console.error("Error products:", error);
@@ -524,123 +691,6 @@ const getCategoriesAndOptions = () => __awaiter(void 0, void 0, void 0, function
     }
     catch (error) {
         console.error("Error getting categories and options:", error);
-        throw error;
-    }
-});
-const handleProductSimple = (find, req) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        console.log("find", find);
-        const products = yield product_model_1.default.aggregate([
-            { $match: find },
-            {
-                $addFields: {
-                    product_id_string: { $toString: "$_id" },
-                },
-            },
-            {
-                $lookup: {
-                    from: "sub-products",
-                    localField: "product_id_string",
-                    foreignField: "product_id",
-                    as: "subProducts",
-                    pipeline: [
-                        { $match: { deleted: false } },
-                        {
-                            $project: {
-                                price: 1,
-                            },
-                        },
-                    ],
-                },
-            },
-            {
-                $set: {
-                    rangePrice: {
-                        min: { $min: "$subProducts.price" },
-                        max: { $max: "$subProducts.price" },
-                    },
-                },
-            },
-            {
-                $unset: ["subProducts", "product_id_string"],
-            },
-            { $limit: 5 },
-        ]);
-        return products;
-    }
-    catch (error) {
-        console.error("Error simple product:", error);
-        throw error;
-    }
-});
-const handleProductVariations = (find, object, req) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        delete find.$or;
-        console.log(object);
-        const variation_options = object.variation_options || [];
-        const products = yield product_model_1.default.find(find).lean();
-        const productIds = products.map((product) => product._id.toString());
-        let findSub = {
-            product_id: { $in: productIds },
-            deleted: false,
-        };
-        if (object.price || object.min_price || object.max_price) {
-            findSub.$or = [
-                { price: Number(object.price) },
-                {
-                    price: {
-                        $gte: Number(object.min_price) || 0,
-                        $lte: Number(object.max_price) || Infinity,
-                    },
-                },
-            ];
-        }
-        const subProducts = yield subProduct_model_1.default.find(findSub).lean();
-        const subIds = subProducts.map((sub) => sub._id.toString());
-        const subOptions = yield subProductOption_model_1.default.find({
-            sub_product_id: { $in: subIds },
-            deleted: false,
-        }).lean();
-        const option_ids = subOptions.map((item) => item.variation_option_id.toString());
-        const options = yield variationOption_model_1.default.find({
-            _id: { $in: option_ids },
-            deleted: false,
-        }).lean();
-        const subOptionsMap = (0, groupBy_1.groupByArray)(subOptions, "sub_product_id");
-        const response = [];
-        for (const sub of subProducts) {
-            if (subOptionsMap.get(String(sub._id)) &&
-                subOptionsMap.get(String(sub._id)).length > 0) {
-                const opts = subOptionsMap.get(String(sub._id));
-                sub["options"] = [];
-                for (const opt of opts) {
-                    const optionObject = options.find((o) => {
-                        return String(o._id) === String(opt.variation_option_id);
-                    });
-                    if (optionObject) {
-                        sub["options"].push(optionObject);
-                    }
-                }
-            }
-            if (sub["options"] && sub["options"].length > 0) {
-                const ids = sub["options"].map((o) => String(o._id));
-                if (variation_options.length > 0) {
-                    const isValid = variation_options.every((id) => ids.includes(id));
-                    if (!isValid) {
-                        continue;
-                    }
-                    const product = products.find((p) => String(p._id) === String(sub.product_id));
-                    sub["slug"] = product ? product.slug : "";
-                    sub["thumbnail_product"] = product ? product.thumbnail : "";
-                    sub["title"] = product ? product.title : "";
-                    response.push(sub);
-                }
-            }
-        }
-        return response.slice(0, 5);
-    }
-    catch (error) {
-        console.error("Error variations product:", error);
         throw error;
     }
 });

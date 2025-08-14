@@ -400,7 +400,7 @@ export const products = async (req: Request, res: Response) => {
   }
 };
 
-export const products_v2 = async (req, res) => {
+export const products_v2 = async (req: Request, res: Response) => {
   try {
     let find: any = {
       deleted: false,

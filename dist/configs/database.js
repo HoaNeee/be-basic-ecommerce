@@ -42,7 +42,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.connect = void 0;
+exports.getQdrantClient = exports.connectQdrant = exports.connect = void 0;
+const js_client_rest_1 = require("@qdrant/js-client-rest");
 const mongoose = __importStar(require("mongoose"));
 const connect = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -54,3 +55,21 @@ const connect = () => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.connect = connect;
+let client = null;
+const connectQdrant = () => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        client = new js_client_rest_1.QdrantClient({
+            url: process.env.QDRANT_URL,
+            apiKey: process.env.QDRANT_API_KEY,
+        });
+        console.log("connect to qdrant success");
+    }
+    catch (error) {
+        console.log("connect to qdrant failed " + error);
+    }
+});
+exports.connectQdrant = connectQdrant;
+const getQdrantClient = () => {
+    return client;
+};
+exports.getQdrantClient = getQdrantClient;

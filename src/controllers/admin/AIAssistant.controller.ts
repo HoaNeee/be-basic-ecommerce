@@ -5,6 +5,9 @@ import Category from "../../models/category.model";
 import Variation from "../../models/variation.model";
 import VariationOption from "../../models/variationOption.model";
 import Supplier from "../../models/supplier.model";
+import { getQdrantClient } from "../../../configs/database";
+import { NAMESPACE_UUID } from "../../../helpers/constant";
+import { v5 as uuidv5 } from "uuid";
 
 const API_KEY = process.env.GOOGLE_GEM_AI_API_KEY;
 const DOMAIN =
@@ -171,7 +174,7 @@ export const aiAssistantProduct = async (
       "shortDescription": "Mô tả ngắn về sản phẩm",
       "categories": ["id1", "id2", ...], bạn có thể chọn các danh mục phù hợp với sản phẩm (hãy dùng id),
       "price": 100000, // giá của sản phẩm, nếu là variations thì hãy để null,
-      "SKU": "Mã SKU của sản phẩm, ví dụ: 'SKU-1234'",
+      "SKU": "Mã SKU của sản phẩm, ví dụ: 'SKU-1234'" (nếu là variations thì trả về SKU đại diện),
       "stock": 100, // số lượng tồn kho của sản phẩm, nếu là variations thì hãy để null,
       "productType": "simple" hoặc "variations", tùy thuộc vào kiểu sản phẩm bạn đã chọn,
       "thumbnail": "URL của hình ảnh thumbnail", bạn có thể sử dụng hình ảnh bất kỳ từ internet.
@@ -215,5 +218,249 @@ export const aiAssistantProduct = async (
       code: 500,
       message: "Internal server error",
     });
+  }
+};
+
+export const embedingProduct = async (
+  product: any,
+  subProducts: any[] = [],
+  subOptions: any[] = []
+) => {
+  if (!product) return;
+
+  const NAMESPACE = NAMESPACE_UUID;
+
+  try {
+    const categories = await Category.find({
+      _id: { $in: product.categories },
+    });
+
+    const qdrantClient = getQdrantClient();
+
+    const max_price = Math.max(...subProducts.map((sub) => sub.price));
+    const min_price = Math.min(...subProducts.map((sub) => sub.price));
+
+    if (product.productType === "variations") {
+      const option_ids = subOptions
+        .map((sub_opt) => sub_opt.variation_option_id)
+        .flat();
+
+      const options = await VariationOption.find({
+        _id: { $in: option_ids },
+        deleted: false,
+      }).select("title key");
+
+      const inputs = [];
+      const payloads = [];
+
+      let cnt = 1;
+
+      for (const sub of subProducts) {
+        const sub_options = options.filter((opt) => {
+          const subs = subOptions.filter(
+            (it) => String(it.sub_product_id) === String(sub._id)
+          );
+          return subs.some(
+            (sub) => String(sub.variation_option_id) === String(opt._id)
+          );
+        });
+        sub["options"] = sub_options;
+        const description = `
+          ${product.title},
+          ${product.SKU},
+          ${sub.SKU},
+          ${product.shortDescription},
+          ${
+            sub?.options
+              ? `${sub.options.map((opt: any) => opt.title).join(", ")}`
+              : ""
+          },
+          Categories: ${categories.map((cat) => cat.title).join(", ")}
+        `;
+
+        if (cnt === 1) {
+          console.log(description);
+          ++cnt;
+        }
+
+        inputs.push(description);
+        payloads.push({
+          _id: String(sub._id),
+          product_id: String(product._id),
+          title: product.title,
+          options: sub_options.map((opt) => opt.title).join(", "),
+          shortDescription: product.shortDescription,
+          productType: product.productType,
+          categories: product.categories,
+          slug: product.slug,
+          price: sub.price,
+          discountedPrice:
+            sub.discountedPrice !== undefined && sub.discountedPrice !== null
+              ? sub.discountedPrice
+              : null,
+          thumbnail: sub.thumbnail,
+          SKU: sub.SKU,
+          thumbnail_product: product.thumbnail,
+        });
+      }
+      const description_product = `
+    ${product.title},
+    ${product.SKU},
+    ${product.shortDescription},
+    Categories: ${categories.map((cat) => cat.title).join(", ")}
+    `;
+
+      inputs.push(description_product);
+
+      const response = await gemAI.models.embedContent({
+        model: "gemini-embedding-001",
+        contents: inputs,
+        config: {
+          outputDimensionality: 1536,
+        },
+      });
+
+      const vectors = response.embeddings.map((embedding) => embedding.values);
+      const vector_product = vectors[vectors.length - 1];
+
+      await Promise.all(
+        vectors.slice(0, vectors.length - 1).map(async (vector, index) => {
+          try {
+            await qdrantClient.getCollection("sub-products");
+          } catch (error) {
+            await qdrantClient.createCollection("sub-products", {
+              vectors: {
+                size: vector.length,
+                distance: "Cosine",
+              },
+            });
+          }
+
+          const sub_uuid = uuidv5(String(subProducts[index]._id), NAMESPACE);
+
+          return qdrantClient.upsert("sub-products", {
+            points: [
+              {
+                id: sub_uuid,
+                vector: vector,
+                payload: payloads[index],
+              },
+            ],
+          });
+        })
+      );
+
+      const product_uuid = uuidv5(String(product._id), NAMESPACE);
+
+      try {
+        await qdrantClient.getCollection("products");
+      } catch (error) {
+        await qdrantClient.createCollection("products", {
+          vectors: {
+            size: vector_product.length,
+            distance: "Cosine",
+          },
+        });
+      }
+
+      await qdrantClient.upsert("products", {
+        points: [
+          {
+            id: product_uuid,
+            vector: vector_product,
+            payload: {
+              _id: String(product._id),
+              title: product.title,
+              shortDescription: product.shortDescription,
+              categories: product.categories,
+              price: product.price,
+              rangePrice: {
+                min: min_price,
+                max: max_price,
+              },
+              min_price:
+                product.productType === "variations" ? min_price : null,
+              max_price:
+                product.productType === "variations" ? max_price : null,
+              thumbnail: product.thumbnail,
+              SKU: product.SKU,
+              slug: product.slug,
+              supplier_id: product.supplier_id,
+              productType: product.productType,
+            },
+          },
+        ],
+      });
+
+      return;
+    }
+
+    const description = `
+    ${product.title},
+    ${product.SKU},
+    ${product.shortDescription},
+    Categories: ${categories.map((cat) => cat.title).join(", ")}
+    `;
+
+    console.log(description);
+
+    const response = await gemAI.models.embedContent({
+      model: "gemini-embedding-001",
+      contents: description,
+      config: {
+        outputDimensionality: 1536,
+      },
+    });
+
+    const vector = response.embeddings[0].values;
+
+    try {
+      await qdrantClient.getCollection("products");
+    } catch (error) {
+      await qdrantClient.createCollection("products", {
+        vectors: {
+          size: vector.length,
+          distance: "Cosine",
+        },
+      });
+    }
+    const product_uuid = uuidv5(String(product._id), NAMESPACE);
+
+    await qdrantClient.upsert("products", {
+      points: [
+        {
+          id: product_uuid,
+          vector: vector,
+          payload: {
+            _id: String(product._id),
+            title: product.title,
+            shortDescription: product.shortDescription,
+            categories: product.categories,
+            price: product.price,
+            min_price: product.productType === "variations" ? min_price : null,
+            max_price: product.productType === "variations" ? max_price : null,
+            thumbnail: product.thumbnail,
+            SKU: product.SKU,
+            slug: product.slug,
+            supplier_id: product.supplier_id,
+            productType: product.productType,
+            discountedPrice:
+              product.discountedPrice !== undefined &&
+              product.discountedPrice !== null
+                ? product.discountedPrice
+                : null,
+            rangePrice:
+              product.productType === "variations"
+                ? {
+                    min: min_price,
+                    max: max_price,
+                  }
+                : null,
+          },
+        },
+      ],
+    });
+  } catch (error) {
+    throw error;
   }
 };

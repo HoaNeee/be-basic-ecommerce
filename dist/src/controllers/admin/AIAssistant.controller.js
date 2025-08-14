@@ -12,13 +12,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.aiAssistantProduct = exports.aiAssistantBlog = void 0;
+exports.embedingProduct = exports.aiAssistantProduct = exports.aiAssistantBlog = void 0;
 const genai_1 = require("@google/genai");
 const blog_model_1 = __importDefault(require("../../models/blog.model"));
 const category_model_1 = __importDefault(require("../../models/category.model"));
 const variation_model_1 = __importDefault(require("../../models/variation.model"));
 const variationOption_model_1 = __importDefault(require("../../models/variationOption.model"));
 const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
+const database_1 = require("../../../configs/database");
+const constant_1 = require("../../../helpers/constant");
+const uuid_1 = require("uuid");
 const API_KEY = process.env.GOOGLE_GEM_AI_API_KEY;
 const DOMAIN = process.env.NODE_ENV === "production"
     ? "https://shop.kakrist.site"
@@ -149,7 +152,7 @@ const aiAssistantProduct = (req, res) => __awaiter(void 0, void 0, void 0, funct
       "shortDescription": "Mô tả ngắn về sản phẩm",
       "categories": ["id1", "id2", ...], bạn có thể chọn các danh mục phù hợp với sản phẩm (hãy dùng id),
       "price": 100000, // giá của sản phẩm, nếu là variations thì hãy để null,
-      "SKU": "Mã SKU của sản phẩm, ví dụ: 'SKU-1234'",
+      "SKU": "Mã SKU của sản phẩm, ví dụ: 'SKU-1234'" (nếu là variations thì trả về SKU đại diện),
       "stock": 100, // số lượng tồn kho của sản phẩm, nếu là variations thì hãy để null,
       "productType": "simple" hoặc "variations", tùy thuộc vào kiểu sản phẩm bạn đã chọn,
       "thumbnail": "URL của hình ảnh thumbnail", bạn có thể sử dụng hình ảnh bất kỳ từ internet.
@@ -191,3 +194,208 @@ const aiAssistantProduct = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.aiAssistantProduct = aiAssistantProduct;
+const embedingProduct = (product_1, ...args_1) => __awaiter(void 0, [product_1, ...args_1], void 0, function* (product, subProducts = [], subOptions = []) {
+    if (!product)
+        return;
+    const NAMESPACE = constant_1.NAMESPACE_UUID;
+    try {
+        const categories = yield category_model_1.default.find({
+            _id: { $in: product.categories },
+        });
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        const max_price = Math.max(...subProducts.map((sub) => sub.price));
+        const min_price = Math.min(...subProducts.map((sub) => sub.price));
+        if (product.productType === "variations") {
+            const option_ids = subOptions
+                .map((sub_opt) => sub_opt.variation_option_id)
+                .flat();
+            const options = yield variationOption_model_1.default.find({
+                _id: { $in: option_ids },
+                deleted: false,
+            }).select("title key");
+            const inputs = [];
+            const payloads = [];
+            let cnt = 1;
+            for (const sub of subProducts) {
+                const sub_options = options.filter((opt) => {
+                    const subs = subOptions.filter((it) => String(it.sub_product_id) === String(sub._id));
+                    return subs.some((sub) => String(sub.variation_option_id) === String(opt._id));
+                });
+                sub["options"] = sub_options;
+                const description = `
+          ${product.title},
+          ${product.SKU},
+          ${sub.SKU},
+          ${product.shortDescription},
+          ${(sub === null || sub === void 0 ? void 0 : sub.options)
+                    ? `${sub.options.map((opt) => opt.title).join(", ")}`
+                    : ""},
+          Categories: ${categories.map((cat) => cat.title).join(", ")}
+        `;
+                if (cnt === 1) {
+                    console.log(description);
+                    ++cnt;
+                }
+                inputs.push(description);
+                payloads.push({
+                    _id: String(sub._id),
+                    product_id: String(product._id),
+                    title: product.title,
+                    options: sub_options.map((opt) => opt.title).join(", "),
+                    shortDescription: product.shortDescription,
+                    productType: product.productType,
+                    categories: product.categories,
+                    slug: product.slug,
+                    price: sub.price,
+                    discountedPrice: sub.discountedPrice !== undefined && sub.discountedPrice !== null
+                        ? sub.discountedPrice
+                        : null,
+                    thumbnail: sub.thumbnail,
+                    SKU: sub.SKU,
+                    thumbnail_product: product.thumbnail,
+                });
+            }
+            const description_product = `
+    ${product.title},
+    ${product.SKU},
+    ${product.shortDescription},
+    Categories: ${categories.map((cat) => cat.title).join(", ")}
+    `;
+            inputs.push(description_product);
+            const response = yield gemAI.models.embedContent({
+                model: "gemini-embedding-001",
+                contents: inputs,
+                config: {
+                    outputDimensionality: 1536,
+                },
+            });
+            const vectors = response.embeddings.map((embedding) => embedding.values);
+            const vector_product = vectors[vectors.length - 1];
+            yield Promise.all(vectors.slice(0, vectors.length - 1).map((vector, index) => __awaiter(void 0, void 0, void 0, function* () {
+                try {
+                    yield qdrantClient.getCollection("sub-products");
+                }
+                catch (error) {
+                    yield qdrantClient.createCollection("sub-products", {
+                        vectors: {
+                            size: vector.length,
+                            distance: "Cosine",
+                        },
+                    });
+                }
+                const sub_uuid = (0, uuid_1.v5)(String(subProducts[index]._id), NAMESPACE);
+                return qdrantClient.upsert("sub-products", {
+                    points: [
+                        {
+                            id: sub_uuid,
+                            vector: vector,
+                            payload: payloads[index],
+                        },
+                    ],
+                });
+            })));
+            const product_uuid = (0, uuid_1.v5)(String(product._id), NAMESPACE);
+            try {
+                yield qdrantClient.getCollection("products");
+            }
+            catch (error) {
+                yield qdrantClient.createCollection("products", {
+                    vectors: {
+                        size: vector_product.length,
+                        distance: "Cosine",
+                    },
+                });
+            }
+            yield qdrantClient.upsert("products", {
+                points: [
+                    {
+                        id: product_uuid,
+                        vector: vector_product,
+                        payload: {
+                            _id: String(product._id),
+                            title: product.title,
+                            shortDescription: product.shortDescription,
+                            categories: product.categories,
+                            price: product.price,
+                            rangePrice: {
+                                min: min_price,
+                                max: max_price,
+                            },
+                            min_price: product.productType === "variations" ? min_price : null,
+                            max_price: product.productType === "variations" ? max_price : null,
+                            thumbnail: product.thumbnail,
+                            SKU: product.SKU,
+                            slug: product.slug,
+                            supplier_id: product.supplier_id,
+                            productType: product.productType,
+                        },
+                    },
+                ],
+            });
+            return;
+        }
+        const description = `
+    ${product.title},
+    ${product.SKU},
+    ${product.shortDescription},
+    Categories: ${categories.map((cat) => cat.title).join(", ")}
+    `;
+        console.log(description);
+        const response = yield gemAI.models.embedContent({
+            model: "gemini-embedding-001",
+            contents: description,
+            config: {
+                outputDimensionality: 1536,
+            },
+        });
+        const vector = response.embeddings[0].values;
+        try {
+            yield qdrantClient.getCollection("products");
+        }
+        catch (error) {
+            yield qdrantClient.createCollection("products", {
+                vectors: {
+                    size: vector.length,
+                    distance: "Cosine",
+                },
+            });
+        }
+        const product_uuid = (0, uuid_1.v5)(String(product._id), NAMESPACE);
+        yield qdrantClient.upsert("products", {
+            points: [
+                {
+                    id: product_uuid,
+                    vector: vector,
+                    payload: {
+                        _id: String(product._id),
+                        title: product.title,
+                        shortDescription: product.shortDescription,
+                        categories: product.categories,
+                        price: product.price,
+                        min_price: product.productType === "variations" ? min_price : null,
+                        max_price: product.productType === "variations" ? max_price : null,
+                        thumbnail: product.thumbnail,
+                        SKU: product.SKU,
+                        slug: product.slug,
+                        supplier_id: product.supplier_id,
+                        productType: product.productType,
+                        discountedPrice: product.discountedPrice !== undefined &&
+                            product.discountedPrice !== null
+                            ? product.discountedPrice
+                            : null,
+                        rangePrice: product.productType === "variations"
+                            ? {
+                                min: min_price,
+                                max: max_price,
+                            }
+                            : null,
+                    },
+                },
+            ],
+        });
+    }
+    catch (error) {
+        throw error;
+    }
+});
+exports.embedingProduct = embedingProduct;

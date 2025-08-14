@@ -24,6 +24,7 @@ const limiter = rateLimit({
 
 dotenv.config();
 database.connect();
+database.connectQdrant();
 
 const app: Express = express();
 

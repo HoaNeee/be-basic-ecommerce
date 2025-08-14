@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.changeSubProductTrashAll = exports.changeTrashAll = exports.bulkChangeSubProductTrash = exports.bulkChangeTrash = exports.changeSubproductTrashOne = exports.changeTrashOne = exports.trashSubProducts = exports.trashProducts = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct_v2 = exports.editSubProduct = exports.edit = exports.create = exports.detail_v2 = exports.products = void 0;
+exports.bulkEmbedProduct = exports.changeIndexed = exports.getAllProductID = exports.syncEmbedTime = exports.deleteEmbedProduct = exports.getProductNotEmbeded = exports.getEmbedStatistic = exports.getEmbedSubProduct = exports.syncEmbedProduct = exports.getEmbedProduct = exports.embedProduct = exports.changeSubProductTrashAll = exports.changeTrashAll = exports.bulkChangeSubProductTrash = exports.bulkChangeTrash = exports.changeSubproductTrashOne = exports.changeTrashOne = exports.trashSubProducts = exports.trashProducts = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct_v2 = exports.editSubProduct = exports.edit = exports.create = exports.detail_v2 = exports.products = void 0;
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const subProductOption_model_1 = __importDefault(require("../../models/subProductOption.model"));
@@ -22,6 +22,12 @@ const variationOption_model_1 = __importDefault(require("../../models/variationO
 const product_1 = require("../../../utils/product");
 const purchaseOrder_model_1 = __importDefault(require("../../models/purchaseOrder.model"));
 const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
+const AIAssistant_controller_1 = require("../admin/AIAssistant.controller");
+const database_1 = require("../../../configs/database");
+const embedProduct_model_1 = __importDefault(require("../../models/embedProduct.model"));
+const constant_1 = require("../../../helpers/constant");
+const uuid_1 = require("uuid");
+const syncEmbedTime_1 = __importDefault(require("../../models/syncEmbedTime"));
 var ProductType;
 (function (ProductType) {
     ProductType["SIMPLE"] = "simple";
@@ -219,7 +225,7 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const stock = (data === null || data === void 0 ? void 0 : data.stock) || 0;
         const product = new product_model_1.default(Object.assign({ price: price, stock: stock }, data));
         const skus = [(data === null || data === void 0 ? void 0 : data.SKU) || ""];
-        let message = "Create new success!!";
+        let message = "Create new success";
         const prefix_SKU = `KAKRIST-SKU`;
         const subs = [];
         const subOptions = [];
@@ -299,23 +305,36 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             subProductOption_model_1.default.insertMany(subOptions),
             purchaseOrder_model_1.default.insertMany(pos),
         ]);
-        const createPurchaseOrder = (data === null || data === void 0 ? void 0 : data.createPurchaseOrder) || false;
-        if (createPurchaseOrder && product.productType === ProductType.VARIATION) {
-            const po = new purchaseOrder_model_1.default({
-                products: [
-                    {
-                        ref_id: product.id,
-                        SKU: product.SKU || "",
-                        quantity: product.stock,
-                        unitCost: product.cost || 0,
-                    },
-                ],
-                supplier_id: (data === null || data === void 0 ? void 0 : data.supplier_id) || "",
-                expectedDelivery: new Date(new Date().getTime() + 5 * 24 * 60 * 60 * 1000),
-                totalCost: Number(product.stock * (product.cost || 0)),
-                typePurchase: "initial",
+        const isEmbedding = (data === null || data === void 0 ? void 0 : data.isEmbedding) || false;
+        if (isEmbedding) {
+            yield (0, AIAssistant_controller_1.embedingProduct)(product, subs, subOptions);
+        }
+        else {
+            syncEmbedProductData({
+                id: String(product._id),
+                action: "update",
+                type: "one",
             });
-            yield po.save();
+        }
+        const createPurchaseOrder = (data === null || data === void 0 ? void 0 : data.createPurchaseOrder) || false;
+        if (product.productType === ProductType.SIMPLE) {
+            if (createPurchaseOrder) {
+                const po = new purchaseOrder_model_1.default({
+                    products: [
+                        {
+                            ref_id: product.id,
+                            SKU: product.SKU || "",
+                            quantity: product.stock,
+                            unitCost: product.cost || 0,
+                        },
+                    ],
+                    supplier_id: (data === null || data === void 0 ? void 0 : data.supplier_id) || "",
+                    expectedDelivery: new Date(new Date().getTime() + 5 * 24 * 60 * 60 * 1000),
+                    totalCost: Number(product.stock * (product.cost || 0)),
+                    typePurchase: "initial",
+                });
+                yield po.save();
+            }
         }
         res.json({
             code: 200,
@@ -352,6 +371,11 @@ const edit = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 throw Error("Type of product is not correct!");
         }
         req.body.stock = ((_a = req.body) === null || _a === void 0 ? void 0 : _a.stock) || 0;
+        yield syncEmbedProductData({
+            id: String(product._id),
+            action: "update",
+            type: "one",
+        });
         yield product_model_1.default.updateOne({ _id: product_id }, req.body);
         res.json({
             code: 200,
@@ -452,8 +476,22 @@ const editSubProduct_v2 = (req, res) => __awaiter(void 0, void 0, void 0, functi
         const product_id = req.params.id;
         const subProducts = req.body.subProducts;
         const combinations = req.body.combinations;
+        if (!product_id) {
+            res.status(400).json({
+                code: 400,
+                message: "Product ID is required",
+            });
+            return;
+        }
         const prefix_SKU = `KAKRIST-SKU`;
-        const product = yield product_model_1.default.findOne({ _id: product_id, deleted: false });
+        const [product] = yield Promise.all([
+            product_model_1.default.findOne({ _id: product_id, deleted: false }),
+            syncEmbedProductData({
+                id: product_id,
+                action: "update",
+                type: "one",
+            }),
+        ]);
         if (!product) {
             throw Error("product is not found");
         }
@@ -713,7 +751,14 @@ const remove = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         }
         product.deleted = true;
         product.deletedAt = new Date();
-        yield product.save();
+        yield Promise.all([
+            product.save(),
+            syncEmbedProductData({
+                id: String(product._id),
+                action: "delete",
+                type: "one",
+            }),
+        ]);
         res.json({
             code: 200,
             message: "Deleted!",
@@ -770,6 +815,11 @@ const changeMulti = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 const ids = subProducts.map((sub) => sub.id);
                 yield subProductOption_model_1.default.deleteMany({ sub_product_id: { $in: ids } });
                 yield subProduct_model_1.default.updateMany({ _id: { $in: ids } }, { deleted: true, deletedAt: new Date() });
+                yield syncEmbedProductData({
+                    ids: payload,
+                    action: "delete",
+                    type: "many",
+                });
                 yield product_model_1.default.updateMany({ _id: { $in: payload } }, { deleted: true, deletedAt: new Date() });
                 break;
             default:
@@ -1139,7 +1189,7 @@ const bulkChangeTrash = (req, res) => __awaiter(void 0, void 0, void 0, function
         const action = req.query.action;
         const ids = req.body.ids;
         const checkedSubProduct = req.body.checkedSubProduct;
-        return yield bulkChangeHelper(ids, action, checkedSubProduct, req, res, product_model_1.default);
+        return yield bulkChangeHelper(ids, action, checkedSubProduct, req, res, product_model_1.default, "product");
     }
     catch (error) {
         res.json({
@@ -1167,6 +1217,14 @@ const changeTrashAll = (req, res) => __awaiter(void 0, void 0, void 0, function*
     try {
         const action = req.query.action;
         const checkedSubProduct = req.body.checkedSubProduct;
+        const products = yield product_model_1.default.find({
+            deleted: true,
+        });
+        yield syncEmbedProductData({
+            ids: products.map((item) => String(item._id)),
+            action: action === "restore" ? "update" : "delete",
+            type: "many",
+        });
         return yield changeTrashAllHelper(action, checkedSubProduct, req, res, product_model_1.default, "product");
     }
     catch (error) {
@@ -1190,6 +1248,464 @@ const changeSubProductTrashAll = (req, res) => __awaiter(void 0, void 0, void 0,
     }
 });
 exports.changeSubProductTrashAll = changeSubProductTrashAll;
+const embedProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const product_id = req.params.productId;
+        const type = req.query.type;
+        if (type === "delete") {
+            yield deleteEmbedHelper(product_id);
+            res.status(200).json({
+                code: 200,
+                message: "Delete product successfully",
+            });
+            yield embedProduct_model_1.default.deleteOne({ product_id });
+            return;
+        }
+        yield embedProductHelper(res, product_id);
+        yield embedProduct_model_1.default.deleteOne({ product_id });
+        res.status(200).json({
+            code: 200,
+            message: "Embed product successfully",
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.embedProduct = embedProduct;
+const getEmbedProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        let limit = 10;
+        let next_page_offset = "";
+        if (req.query.limit) {
+            limit = parseInt(req.query.limit) || 10;
+        }
+        if (req.query.next_page_offset) {
+            next_page_offset = req.query.next_page_offset;
+        }
+        const collection = yield qdrantClient.scroll("products", {
+            limit: limit,
+            offset: next_page_offset || 0,
+            with_payload: true,
+        });
+        res.status(200).json({
+            code: 200,
+            message: "successfully!",
+            data: {
+                products: collection.points.map((item) => {
+                    return Object.assign({ vector_id: item.id, vector: item.vector }, item.payload);
+                }),
+                next_page_offset: collection.next_page_offset,
+            },
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.getEmbedProduct = getEmbedProduct;
+const syncEmbedProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const vector_id = req.params.vector_id;
+        const collection_name = req.query.collection_name;
+        if (!vector_id) {
+            res.status(400).json({
+                code: 400,
+                message: "Vector ID is required",
+            });
+            return;
+        }
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        const records = yield qdrantClient.retrieve(collection_name, {
+            ids: [vector_id],
+        });
+        let record = records[0].payload;
+        const product_id = collection_name === "products" ? record._id : record.product_id;
+        const [product, subProducts] = yield Promise.all([
+            product_model_1.default.findOne({
+                _id: product_id,
+                deleted: false,
+            }).lean(),
+            subProduct_model_1.default.find({
+                product_id: product_id,
+                deleted: false,
+            }).lean(),
+        ]);
+        const subOptions = yield subProductOption_model_1.default.find({
+            sub_product_id: { $in: subProducts.map((item) => String(item._id)) },
+            deleted: false,
+        }).lean();
+        if (product && subProducts.length > 0 && subOptions.length > 0) {
+            yield (0, AIAssistant_controller_1.embedingProduct)(product, subProducts, subOptions);
+        }
+        const newRecord = yield qdrantClient.retrieve(collection_name, {
+            ids: [vector_id],
+        });
+        record = newRecord[0].payload;
+        res.status(200).json({
+            code: 200,
+            message: "Sync Successfully!",
+            data: record,
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.syncEmbedProduct = syncEmbedProduct;
+const getEmbedSubProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        let limit = 10;
+        let next_page_offset = "";
+        if (req.query.limit) {
+            limit = parseInt(req.query.limit) || 10;
+        }
+        if (req.query.next_page_offset) {
+            next_page_offset = req.query.next_page_offset;
+        }
+        const collection = yield qdrantClient.scroll("sub-products", {
+            limit: limit,
+            offset: next_page_offset || 0,
+            with_payload: true,
+            with_vector: false,
+        });
+        res.status(200).json({
+            code: 200,
+            message: "successfully!",
+            data: {
+                subProducts: collection.points.map((item) => {
+                    return Object.assign({ vector_id: item.id }, item.payload);
+                }),
+                next_page_offset: collection.next_page_offset,
+            },
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.getEmbedSubProduct = getEmbedSubProduct;
+const getEmbedStatistic = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        const sub_collection = yield qdrantClient.getCollection("sub-products");
+        const total_vectors_sub_products = sub_collection.points_count;
+        const subProduct = yield qdrantClient.scroll("sub-products", {
+            limit: 1,
+            with_payload: true,
+            with_vector: false,
+        });
+        let payload = {};
+        if (subProduct.points.length > 0) {
+            payload = subProduct.points[0].payload;
+        }
+        const object = yield getProductNotEmbedHelper();
+        const sync_time = yield syncEmbedTime_1.default.findOne({ type_sync: "product" });
+        res.status(200).json({
+            code: 200,
+            message: "successfully!",
+            data: {
+                total_vectors: object.total_vectors,
+                total_vectors_sub_products,
+                pending_embeddings: object.product_not_embedded.length,
+                pending_sync: object.product_need_sync.length,
+                last_sync: sync_time ? sync_time.sync_time : null,
+                payload_schema_product: object.payload_schema_product,
+                payload_schema_sub_product: Object.assign(Object.assign({}, payload), { payload_schema: sub_collection.payload_schema }),
+            },
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.getEmbedStatistic = getEmbedStatistic;
+const getProductNotEmbeded = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const object = yield getProductNotEmbedHelper();
+        res.status(200).json({
+            code: 200,
+            message: "successfully!",
+            data: {
+                product_not_embedded: object.product_not_embedded,
+                product_need_sync: object.product_need_sync,
+            },
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.getProductNotEmbeded = getProductNotEmbeded;
+const deleteEmbedProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const vector_id = req.params.vector_id;
+        const collection_name = req.query.collection_name;
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        if (collection_name === "products") {
+            const records = yield qdrantClient.retrieve("products", {
+                ids: [vector_id],
+                with_payload: true,
+                with_vector: false,
+            });
+            const product_id = records[0].payload._id;
+            yield deleteEmbedHelper(product_id);
+        }
+        else {
+            yield qdrantClient.delete(collection_name, {
+                points: [vector_id],
+            });
+        }
+        res.status(200).json({
+            code: 200,
+            message: "Deleted Embedding Successfully!",
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.deleteEmbedProduct = deleteEmbedProduct;
+const syncEmbedTime = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const type_sync = req.body.type_sync;
+        const record = yield syncEmbedTime_1.default.findOne({ type_sync });
+        if (!record) {
+            yield syncEmbedTime_1.default.insertOne({
+                type_sync,
+                sync_time: new Date(),
+            });
+        }
+        else {
+            record.sync_time = new Date();
+            yield record.save();
+        }
+        res.status(200).json({
+            code: 200,
+            message: "Sync Time Successfully!",
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.syncEmbedTime = syncEmbedTime;
+const getAllProductID = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const products = yield product_model_1.default.find({ deleted: false }, { _id: 1, title: 1 }).lean();
+        res.status(200).json({
+            code: 200,
+            message: "Get All Product IDs Successfully!",
+            data: products,
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.getAllProductID = getAllProductID;
+const changeIndexed = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const payload = req.body.payload || [];
+        const payload_product = payload.filter((it) => it.product_type === "product");
+        const payload_sub_product = payload.filter((it) => it.product_type === "sub-product");
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        const promises = [];
+        for (const item of payload_sub_product) {
+            const key = item.key;
+            if (item.checked) {
+                promises.push(qdrantClient.createPayloadIndex("sub-products", {
+                    field_name: key,
+                    field_schema: item.data_type,
+                }));
+            }
+            else {
+                promises.push(qdrantClient.deletePayloadIndex("sub-products", key));
+            }
+        }
+        for (const item of payload_product) {
+            const key = item.key;
+            if (item.checked) {
+                promises.push(qdrantClient.createPayloadIndex("products", {
+                    field_name: key,
+                    field_schema: item.data_type,
+                }));
+            }
+            else {
+                promises.push(qdrantClient.deletePayloadIndex("products", key));
+            }
+        }
+        yield Promise.all(promises);
+        res.status(200).json({
+            code: 200,
+            message: "Change Indexed Successfully!",
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.changeIndexed = changeIndexed;
+const bulkEmbedProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const vector_ids = req.body.vector_ids;
+        const collection_name = req.query.collection_name;
+        if (!vector_ids || vector_ids.length === 0) {
+            res.status(400).json({
+                code: 400,
+                message: "Vector IDs are required",
+            });
+            return;
+        }
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        if (collection_name === "products") {
+            const records = yield (0, database_1.getQdrantClient)().retrieve("products", {
+                ids: vector_ids,
+                with_payload: true,
+                with_vector: false,
+            });
+            const product_ids = records.map((item) => item.payload._id);
+            yield Promise.all(product_ids.map((id) => qdrantClient.delete("sub-products", {
+                filter: {
+                    must: [
+                        {
+                            key: "product_id",
+                            match: { value: id },
+                        },
+                    ],
+                },
+            })));
+        }
+        yield qdrantClient.delete(collection_name, {
+            points: vector_ids,
+        });
+        res.status(200).json({
+            code: 200,
+            message: "Deleted Embedding Successfully!",
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.bulkEmbedProduct = bulkEmbedProduct;
+const embedProductHelper = (res, product_id) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        if (!product_id) {
+            res.status(400).json({
+                code: 400,
+                message: "Product ID is required",
+            });
+            return;
+        }
+        const product = yield product_model_1.default.findOne({ _id: product_id, deleted: false });
+        if (!product) {
+            res.status(404).json({
+                code: 404,
+                message: "Product not found",
+            });
+            return;
+        }
+        const subProducts = yield subProduct_model_1.default.find({
+            product_id,
+            deleted: false,
+        }).lean();
+        const sub_ids = subProducts.map((item) => String(item._id));
+        const subOptions = yield subProductOption_model_1.default.find({
+            sub_product_id: { $in: sub_ids },
+            deleted: false,
+        }).lean();
+        yield (0, AIAssistant_controller_1.embedingProduct)(product, subProducts, subOptions);
+    }
+    catch (error) {
+        throw error;
+    }
+});
+const getProductNotEmbedHelper = () => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        const collection = yield qdrantClient.getCollection("products");
+        const total_vectors = collection.points_count;
+        const records = yield qdrantClient.scroll("products", {
+            limit: total_vectors,
+            with_payload: true,
+            with_vector: false,
+        });
+        let payload = {};
+        if (records.points.length > 0) {
+            payload = records.points[0].payload;
+        }
+        const embedProductData = yield embedProduct_model_1.default.find({});
+        const embedProductIds = embedProductData.map((item) => item.product_id);
+        const product_ids = records.points.map((item) => item.payload._id);
+        const [product_not_embedded, product_need_sync] = yield Promise.all([
+            product_model_1.default.find({
+                _id: { $nin: product_ids },
+                deleted: false,
+            })
+                .select("title thumbnail SKU")
+                .lean(),
+            product_model_1.default.find({
+                _id: { $in: embedProductIds },
+            })
+                .select("title thumbnail SKU")
+                .lean(),
+        ]);
+        return {
+            total_vectors,
+            product_not_embedded: product_not_embedded.map((item) => (Object.assign(Object.assign({}, item), { type: "update" }))),
+            product_need_sync: product_need_sync.map((item) => {
+                const it = embedProductData.find((e) => e.product_id === String(item._id));
+                return Object.assign(Object.assign({}, item), { type: it.type });
+            }),
+            payload_schema_product: Object.assign(Object.assign({}, payload), { payload_schema: collection.payload_schema }),
+        };
+    }
+    catch (error) {
+        throw error;
+    }
+});
 const changeTrashOneHelper = (id, type, checkedSubProduct, req, res, Model, isProduct) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         if (!id) {
@@ -1206,6 +1722,13 @@ const changeTrashOneHelper = (id, type, checkedSubProduct, req, res, Model, isPr
                 message: "Product not found",
             });
             return;
+        }
+        if (isProduct) {
+            yield syncEmbedProductData({
+                id,
+                action: type === "restore" ? "update" : "delete",
+                type: "one",
+            });
         }
         if (type === "restore") {
             record.deleted = false;
@@ -1266,6 +1789,13 @@ const bulkChangeHelper = (ids_1, action_1, checkedSubProduct_1, req_1, res_1, Mo
             });
             return;
         }
+        if (type === "product") {
+            syncEmbedProductData({
+                ids,
+                action: action === "restore" ? "update" : "delete",
+                type: "many",
+            });
+        }
         if (action === "restore") {
             yield Model.updateMany({ _id: { $in: ids } }, { deleted: false });
             if (checkedSubProduct && type === "product") {
@@ -1324,6 +1854,68 @@ const changeTrashAllHelper = (action_1, checkedSubProduct_1, req_1, res_1, Model
     }
     catch (error) {
         console.log(error);
+        throw error;
+    }
+});
+const syncEmbedProductData = (_a) => __awaiter(void 0, [_a], void 0, function* ({ ids, id, action, type, }) {
+    try {
+        if (type === "many") {
+            const exists = yield embedProduct_model_1.default.find({
+                product_id: { $in: ids },
+            });
+            const exist_ids = exists.map((item) => String(item.product_id));
+            if (exists.length > 0) {
+                yield embedProduct_model_1.default.updateMany({
+                    _id: { $in: exists.map((item) => item._id) },
+                }, {
+                    type: action,
+                });
+            }
+            else {
+                const new_ids = ids.filter((id) => !exist_ids.includes(id));
+                yield embedProduct_model_1.default.insertMany(new_ids.map((id) => ({
+                    product_id: id,
+                    type: action,
+                })));
+            }
+        }
+        else {
+            const exist = yield embedProduct_model_1.default.findOne({ product_id: id });
+            if (exist) {
+                yield embedProduct_model_1.default.updateOne({ product_id: id }, { type: action });
+            }
+            else {
+                yield embedProduct_model_1.default.insertOne({
+                    product_id: id,
+                    type: action,
+                });
+            }
+        }
+    }
+    catch (error) {
+        throw error;
+    }
+});
+const deleteEmbedHelper = (product_id) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        if (!product_id) {
+            throw new Error("Product ID is required");
+        }
+        const NAMESPACE = constant_1.NAMESPACE_UUID;
+        const product_uuid = (0, uuid_1.v5)(product_id, NAMESPACE);
+        const subProducts = yield subProduct_model_1.default.find({ product_id });
+        const sub_uuids = subProducts.map((item) => (0, uuid_1.v5)(String(item._id), NAMESPACE));
+        const qdrantClient = (0, database_1.getQdrantClient)();
+        yield Promise.all([
+            qdrantClient.delete("products", {
+                points: [product_uuid],
+            }),
+            qdrantClient.delete("sub-products", {
+                points: sub_uuids,
+            }),
+        ]);
+    }
+    catch (error) {
         throw error;
     }
 });

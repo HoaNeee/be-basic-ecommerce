@@ -60,6 +60,7 @@ const limiter = (0, express_rate_limit_1.rateLimit)({
 });
 dotenv_1.default.config();
 database.connect();
+database.connectQdrant();
 const app = (0, express_1.default)();
 const server = node_http_1.default.createServer(app);
 const whiteList = [

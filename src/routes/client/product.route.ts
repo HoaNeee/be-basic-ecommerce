@@ -10,5 +10,7 @@ router.get("/best-seller", controller.getBestSeller);
 router.get("/related", controller.getRelatedProduct);
 router.get("/variations", controller.getVariationOptions);
 
+// router.post("/test-api", controller.testAPI);
+
 const productRouter = router;
 export default productRouter;
