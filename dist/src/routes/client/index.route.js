@@ -46,7 +46,6 @@ const review_route_1 = __importDefault(require("./review.route"));
 const authMiddleware = __importStar(require("../../middlewares/client/auth.middleware"));
 const upload_route_1 = __importDefault(require("./upload.route"));
 const supplier_route_1 = __importDefault(require("./supplier.route"));
-const pament_route_1 = __importDefault(require("./pament.route"));
 const order_route_1 = __importDefault(require("./order.route"));
 const favorite_route_1 = __importDefault(require("./favorite.route"));
 const blog_route_1 = __importDefault(require("./blog.route"));
@@ -55,6 +54,7 @@ const transaction_route_1 = __importDefault(require("./transaction.route"));
 const chatbot_route_1 = __importDefault(require("./chatbot.route"));
 const suggestion_route_1 = __importDefault(require("./suggestion.route"));
 const settingMiddleware = __importStar(require("../../middlewares/setting.middleware"));
+const subscriber_route_1 = __importDefault(require("./subscriber.route"));
 const ClientRoute = (app) => {
     app.use((req, res, next) => {
         if (req.session["createdAt"] === undefined) {
@@ -73,9 +73,9 @@ const ClientRoute = (app) => {
     app.use("/search", search_route_1.default);
     app.use("/chatbot", chatbot_route_1.default);
     app.use("/suggestions", suggestion_route_1.default);
+    app.use("/subscribers", subscriber_route_1.default);
     app.use("/cart", authMiddleware.isAccess, cart_route_1.default);
     app.use("/address", authMiddleware.isAccess, address_route_1.default);
-    app.use("/payments", authMiddleware.isAccess, pament_route_1.default);
     app.use("/orders", authMiddleware.isAccess, order_route_1.default);
     app.use("/favorites", authMiddleware.isAccess, favorite_route_1.default);
     app.use("/transaction", authMiddleware.isAccess, transaction_route_1.default);

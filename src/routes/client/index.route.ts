@@ -9,7 +9,6 @@ import reviewRouter from "./review.route";
 import * as authMiddleware from "../../middlewares/client/auth.middleware";
 import uploadRouter from "./upload.route";
 import supplierRouter from "./supplier.route";
-import paymentRouter from "./pament.route";
 import orderRouter from "./order.route";
 import favoriteRouter from "./favorite.route";
 import blogRouter from "./blog.route";
@@ -18,6 +17,7 @@ import transactionRouter from "./transaction.route";
 import chatBotRouter from "./chatbot.route";
 import suggestRouter from "./suggestion.route";
 import * as settingMiddleware from "../../middlewares/setting.middleware";
+import subscriberRouter from "./subscriber.route";
 
 const ClientRoute = (app: Express) => {
   app.use((req, res, next) => {
@@ -39,10 +39,10 @@ const ClientRoute = (app: Express) => {
   app.use("/search", searchRouter);
   app.use("/chatbot", chatBotRouter);
   app.use("/suggestions", suggestRouter);
+  app.use("/subscribers", subscriberRouter);
 
   app.use("/cart", authMiddleware.isAccess, cartRouter);
   app.use("/address", authMiddleware.isAccess, addressRouter);
-  app.use("/payments", authMiddleware.isAccess, paymentRouter);
   app.use("/orders", authMiddleware.isAccess, orderRouter);
   app.use("/favorites", authMiddleware.isAccess, favoriteRouter);
   app.use("/transaction", authMiddleware.isAccess, transactionRouter);

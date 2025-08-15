@@ -125,6 +125,14 @@ export const addProduct = async (req: MyRequest, res: Response) => {
     let cart: any;
 
     const product_id = body.product_id;
+    if (!product_id) {
+      res.status(400).json({
+        code: 400,
+        message: "Missing product_id",
+      });
+      return;
+    }
+
     if (productType === "simple") {
       const cartItem = await CartDetail.findOne({
         cart_id: cart_id,

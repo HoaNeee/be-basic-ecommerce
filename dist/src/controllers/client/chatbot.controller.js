@@ -230,7 +230,7 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
       - Nếu intent mới khác với intent trước đó của người dùng, hãy cập nhật state của người dùng với intent mới và query mới (nếu có).
       - Dựa vào input của người dùng để xác định "new" (true nếu bạn nghĩ input là một truy vấn mới, false nếu không).
       - Nếu intent mới giống thì hãy cập nhật userState.lastQuery với query mới (nếu là intent dạng search).
-      - Nếu có đề cập đến sản phẩm tương tự thì hãy dựa vào userState.lastQuery để lấy categories tương ứng và trả về nó.
+      - Nếu có đề cập đến sản phẩm tương tự thì hãy dựa vào userState.data để lấy product với categories tương ứng và trả về nó.
 
       - Dữ liệu tham khảo thêm cho việc cập nhật userState.lastQuery:
       - Hãy nhớ đi theo format đã có của userState.
@@ -239,7 +239,7 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
         + Danh sách danh mục (dạng: tên:danh_mục_id): ${categoriesMap}
         + Chú ý: 
           - Trường 'userState.query.productType' là "variations" nếu có biến thể, "simple" nếu không, biến thể là các tùy chọn như màu sắc, kích thước.. (nếu có).
-          - Nếu có đề cập đến tùy chọn như màu, size..., hãy trả về 'variation_options' là danh sách '_id' phù hợp và productType là "variations".
+          - Trường 'price' là giá trung bình (price), cùng với khoảng minPrice và maxPrice dao động ±10% (nếu có).
 
       - Nếu intent là search_blog:
         + Danh sách tags (dạng: tên): ${formattedChat
@@ -302,8 +302,8 @@ const promptProductDetail = (req, res, input, chat, intent, product) => __awaite
             new: false,
             query: {
                 input: input,
-                product: product,
             },
+            data: product,
         };
     }
     const prompt = `Bạn là một trợ lý ảo của trang web, dựa vào lịch sử trò chuyện cho việc thông tin chi tiết sản phẩm, hãy trả lời một cách tự nhiên và thân thiện, vui vẻ, trò chuyện với người dùng.

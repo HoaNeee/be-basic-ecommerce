@@ -40,9 +40,11 @@ const mongoose_1 = __importStar(require("mongoose"));
 const mongoose_slug_updater_1 = __importDefault(require("mongoose-slug-updater"));
 mongoose_1.default.plugin(mongoose_slug_updater_1.default);
 const supplierSchema = new mongoose_1.Schema({
-    name: String,
-    product: String,
-    category: {
+    name: {
+        type: String,
+        required: true,
+    },
+    categories: {
         type: [String],
     },
     slug: {
@@ -50,7 +52,6 @@ const supplierSchema = new mongoose_1.Schema({
         slug: "name",
         unique: true,
     },
-    price: Number,
     contact: String,
     thumbnail: String,
     isTaking: {

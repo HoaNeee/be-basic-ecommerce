@@ -35,11 +35,12 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controller = __importStar(require("../../controllers/client/address.controller"));
+const address_validate_1 = require("../../validate/client/address.validate");
 const router = (0, express_1.Router)();
 router.get("/", controller.index);
 router.get("/default", controller.addressDefault);
-router.post("/create", controller.create);
-router.patch("/edit/:id", controller.edit);
+router.post("/create", address_validate_1.createAddressValidation, controller.create);
+router.patch("/edit/:id", address_validate_1.createAddressValidation, controller.edit);
 router.delete("/delete/:id", controller.remove);
 const addressRouter = router;
 exports.default = addressRouter;

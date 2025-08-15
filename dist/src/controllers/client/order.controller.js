@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.changeStatus = exports.editBill = exports.create = exports.detail = exports.orders = void 0;
+exports.changeStatus = exports.create = exports.detail = exports.orders = void 0;
 const order_model_1 = __importDefault(require("../../models/order.model"));
 const cartDetail_model_1 = __importDefault(require("../../models/cartDetail.model"));
 const order_1 = require("../../../utils/order");
@@ -302,27 +302,6 @@ const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.create = create;
-const editBill = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const user_id = req.userId;
-        const order_id = req.params.id;
-        console.log(user_id);
-        console.log(order_id);
-        res.json({
-            code: 200,
-            message: "Updated!",
-            data: {},
-        });
-    }
-    catch (error) {
-        console.log(error);
-        res.json({
-            code: 400,
-            message: error.message || error,
-        });
-    }
-});
-exports.editBill = editBill;
 const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user_id = req.userId;

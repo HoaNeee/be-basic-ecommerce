@@ -6,22 +6,52 @@ const schema = new Schema(
       type: String,
       required: true,
     },
-    name: String,
-    phone: String,
-    houseNo: String,
+    name: {
+      type: String,
+      required: true,
+    },
+    phone: {
+      type: String,
+      required: true,
+    },
+    houseNo: {
+      type: String,
+      required: true,
+    },
     city: {
-      title: String,
-      value: String,
+      title: {
+        type: String,
+        required: true,
+      },
+      value: {
+        type: String,
+        required: true,
+      },
     },
     district: {
-      title: String,
-      value: String,
+      title: {
+        type: String,
+        required: true,
+      },
+      value: {
+        type: String,
+        required: true,
+      },
     },
     ward: {
-      title: String,
-      value: String,
+      title: {
+        type: String,
+        required: true,
+      },
+      value: {
+        type: String,
+        required: true,
+      },
     },
-    isDefault: Boolean,
+    isDefault: {
+      type: Boolean,
+      default: false,
+    },
     deleted: {
       type: Boolean,
       default: false,

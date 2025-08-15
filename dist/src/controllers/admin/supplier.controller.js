@@ -12,17 +12,33 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.dataExport = exports.exportExcel = exports.form = exports.remove = exports.update = exports.create = exports.index = void 0;
+exports.dataExport = exports.exportExcel = exports.form = exports.remove = exports.update = exports.create = exports.suppliers = void 0;
 const supplier_model_1 = __importDefault(require("../../models/supplier.model"));
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
-const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const category_model_1 = __importDefault(require("../../models/category.model"));
+const suppliers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const find = {
             deleted: false,
         };
+        const isTakingReturn = req.query.isTakingReturn;
+        const keyword = req.query.keyword;
+        const categories = req.query.categories;
+        if (categories && categories !== "") {
+            const array = categories.split(",");
+            find["categories"] = { $in: array };
+        }
+        if (isTakingReturn !== undefined &&
+            isTakingReturn !== null &&
+            isTakingReturn !== "") {
+            find["isTaking"] = Number(isTakingReturn);
+        }
+        if (keyword) {
+            find["name"] = { $regex: keyword, $options: "si" };
+        }
         const initObjectPagination = {
             page: 1,
-            limitItems: 1000,
+            limitItems: 10,
         };
         const totalRecord = yield supplier_model_1.default.countDocuments(find);
         if (req.query.limit) {
@@ -45,7 +61,7 @@ const index = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
 });
-exports.index = index;
+exports.suppliers = suppliers;
 const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const supplier = new supplier_model_1.default(req.body);
@@ -109,6 +125,7 @@ const form = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 message: "Please enter " + name,
             };
         };
+        const categories = yield category_model_1.default.find({ deleted: false }).select("title _id");
         const formData = {
             nameForm: "supplier",
             size: "large",
@@ -134,27 +151,16 @@ const form = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     typeInput: "email",
                 },
                 {
-                    key: "product",
-                    value: "product",
-                    label: "Product",
-                    placeholder: "Enter product",
-                    type: "default",
-                },
-                {
-                    key: "category",
-                    value: "category",
+                    key: "categories",
+                    value: "categories",
                     label: "Category",
+                    rule: rule("Categories"),
                     placeholder: "Select product category",
                     type: "select",
-                    look_up: [],
-                },
-                {
-                    key: "price",
-                    value: "price",
-                    label: "Buying Price",
-                    placeholder: "Enter buying price",
-                    type: "default",
-                    typeInput: "number",
+                    look_items: categories.map((item) => ({
+                        label: item.title,
+                        value: item._id,
+                    })),
                 },
                 {
                     key: "contact",

@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controller = __importStar(require("../../controllers/admin/supplier.controller"));
 const router = (0, express_1.Router)();
-router.get("/", controller.index);
+router.get("/", controller.suppliers);
 router.post("/create", controller.create);
 router.patch("/edit/:id", controller.update);
 router.delete("/delete/:id", controller.remove);

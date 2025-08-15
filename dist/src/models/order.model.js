@@ -59,10 +59,16 @@ const schema = new mongoose_1.Schema({
     },
     shippingAddress: {
         type: {
-            name: String,
-            address: String,
-            phone: String,
+            name: {
+                type: String,
+                required: true,
+            },
+            address: {
+                type: String,
+                required: true,
+            },
         },
+        required: true,
     },
     totalPrice: Number,
     status: {
@@ -83,7 +89,10 @@ const schema = new mongoose_1.Schema({
     },
     estimatedDelivery: Date,
     deliveredAt: Date,
-    paymentMethod: String,
+    paymentMethod: {
+        type: String,
+        required: true,
+    },
     paymentStatus: {
         type: Number,
         default: 0,

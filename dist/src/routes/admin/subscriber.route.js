@@ -34,12 +34,9 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const controller = __importStar(require("../../controllers/client/order.controller"));
-const order_validate_1 = require("../../validate/client/order.validate");
+const controller = __importStar(require("../../controllers/admin/subscriber.controller"));
 const router = (0, express_1.Router)();
-router.get("/", controller.orders);
-router.get("/detail/:order_no", controller.detail);
-router.post("/create", order_validate_1.createOrderValidation, controller.create);
-router.patch("/change-status/:id", order_validate_1.changeStatusValidation, controller.changeStatus);
-const orderRouter = router;
-exports.default = orderRouter;
+router.get("/", controller.getSubscribers);
+router.patch("/:id", controller.updateSentEmail);
+const subscriberRouter = router;
+exports.default = subscriberRouter;

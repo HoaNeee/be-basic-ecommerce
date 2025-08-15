@@ -140,13 +140,19 @@ const remove = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         }
         const address = yield address_model_1.default.findOne({
             _id: address_id,
-            user_id,
             deleted: false,
         });
         if (!address) {
             res.status(404).json({
                 code: 404,
                 message: "Address not found!",
+            });
+            return;
+        }
+        if (address.user_id !== user_id) {
+            res.status(403).json({
+                code: 403,
+                message: "Forbidden",
             });
             return;
         }

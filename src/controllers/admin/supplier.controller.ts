@@ -2,17 +2,39 @@ import { Request, Response } from "express";
 import { MyRequest } from "../../middlewares/admin/auth.middleware";
 import Supplier from "../../models/supplier.model";
 import Pagination from "../../../helpers/pagination";
+import Category from "../../models/category.model";
 
 // [GET] /suppliers
-export const index = async (req: Request, res: Response) => {
+export const suppliers = async (req: Request, res: Response) => {
   try {
     const find = {
       deleted: false,
     };
 
+    const isTakingReturn = req.query.isTakingReturn;
+    const keyword = req.query.keyword;
+    const categories = req.query.categories as string;
+
+    if (categories && categories !== "") {
+      const array = categories.split(",");
+      find["categories"] = { $in: array };
+    }
+
+    if (
+      isTakingReturn !== undefined &&
+      isTakingReturn !== null &&
+      isTakingReturn !== ""
+    ) {
+      find["isTaking"] = Number(isTakingReturn);
+    }
+
+    if (keyword) {
+      find["name"] = { $regex: keyword, $options: "si" };
+    }
+
     const initObjectPagination = {
       page: 1,
-      limitItems: 1000,
+      limitItems: 10,
     };
 
     const totalRecord = await Supplier.countDocuments(find);
@@ -111,6 +133,10 @@ export const form = async (req: Request, res: Response) => {
       };
     };
 
+    const categories = await Category.find({ deleted: false }).select(
+      "title _id"
+    );
+
     const formData = {
       nameForm: "supplier",
       size: "large",
@@ -136,27 +162,16 @@ export const form = async (req: Request, res: Response) => {
           typeInput: "email",
         },
         {
-          key: "product",
-          value: "product",
-          label: "Product",
-          placeholder: "Enter product",
-          type: "default",
-        },
-        {
-          key: "category",
-          value: "category",
+          key: "categories",
+          value: "categories",
           label: "Category",
+          rule: rule("Categories"),
           placeholder: "Select product category",
           type: "select",
-          look_up: [],
-        },
-        {
-          key: "price",
-          value: "price",
-          label: "Buying Price",
-          placeholder: "Enter buying price",
-          type: "default",
-          typeInput: "number",
+          look_items: categories.map((item) => ({
+            label: item.title,
+            value: item._id,
+          })),
         },
         {
           key: "contact",

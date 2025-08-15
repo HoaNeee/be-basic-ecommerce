@@ -79,6 +79,7 @@ const products = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const products = yield product_model_1.default.find(find)
             .skip(objectPagination.skip)
             .limit(objectPagination.limitItems)
+            .sort({ createdAt: -1 })
             .lean();
         const product_ids = products.map((item) => String(item._id));
         const subProducts = yield subProduct_model_1.default.find({

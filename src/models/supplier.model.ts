@@ -4,9 +4,11 @@ mongoose.plugin(slug);
 
 const supplierSchema = new Schema(
   {
-    name: String,
-    product: String,
-    category: {
+    name: {
+      type: String,
+      required: true,
+    },
+    categories: {
       type: [String],
     },
     slug: {
@@ -14,7 +16,6 @@ const supplierSchema = new Schema(
       slug: "name",
       unique: true,
     },
-    price: Number,
     contact: String,
     thumbnail: String,
     isTaking: {

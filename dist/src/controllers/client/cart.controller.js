@@ -118,6 +118,13 @@ const addProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         const body = req.body;
         let cart;
         const product_id = body.product_id;
+        if (!product_id) {
+            res.status(400).json({
+                code: 400,
+                message: "Missing product_id",
+            });
+            return;
+        }
         if (productType === "simple") {
             const cartItem = yield cartDetail_model_1.default.findOne({
                 cart_id: cart_id,

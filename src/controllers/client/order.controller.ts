@@ -372,30 +372,6 @@ export const create = async (req: MyRequest, res: Response) => {
   }
 };
 
-// [PATCH] /orders/edit/:id
-export const editBill = async (req: MyRequest, res: Response) => {
-  try {
-    const user_id = req.userId;
-
-    const order_id = req.params.id;
-
-    console.log(user_id);
-    console.log(order_id);
-
-    res.json({
-      code: 200,
-      message: "Updated!",
-      data: {},
-    });
-  } catch (error) {
-    console.log(error);
-    res.json({
-      code: 400,
-      message: error.message || error,
-    });
-  }
-};
-
 // [PATCH] /orders/change-status/:id
 export const changeStatus = async (req: MyRequest, res: Response) => {
   try {

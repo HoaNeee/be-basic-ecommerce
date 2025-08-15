@@ -156,7 +156,6 @@ export const remove = async (req: MyRequest, res: Response) => {
 
     const address = await Address.findOne({
       _id: address_id,
-      user_id,
       deleted: false,
     });
 
@@ -164,6 +163,14 @@ export const remove = async (req: MyRequest, res: Response) => {
       res.status(404).json({
         code: 404,
         message: "Address not found!",
+      });
+      return;
+    }
+
+    if (address.user_id !== user_id) {
+      res.status(403).json({
+        code: 403,
+        message: "Forbidden",
       });
       return;
     }

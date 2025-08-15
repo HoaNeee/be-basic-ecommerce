@@ -35,9 +35,9 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controller = __importStar(require("../../controllers/client/suggestion.controller"));
-const suggestion_validate_1 = require("../../validate/suggestion.validate");
+const suggestion_validate_1 = require("../../validate/client/suggestion.validate");
 const router = (0, express_1.Router)();
 router.get("/", controller.getTrackedList);
-router.post("/track", suggestion_validate_1.validateTrackSuggestion, controller.trackSuggestion);
+router.post("/track", suggestion_validate_1.validatorTrackSuggestion, controller.trackSuggestion);
 const suggestRouter = router;
 exports.default = suggestRouter;

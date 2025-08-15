@@ -90,6 +90,7 @@ export const products = async (req: Request, res: Response) => {
     const products = await Product.find(find)
       .skip(objectPagination.skip)
       .limit(objectPagination.limitItems)
+      .sort({ createdAt: -1 })
       .lean();
 
     const product_ids = products.map((item) => String(item._id));

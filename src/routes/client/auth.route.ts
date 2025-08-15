@@ -3,6 +3,10 @@ import { rateLimit } from "express-rate-limit";
 
 import * as controller from "../../controllers/client/auth.controller";
 import * as authMiddleware from "../../middlewares/client/auth.middleware";
+import {
+  registerValidator,
+  updateProfileValidator,
+} from "../../validate/client/auth.validate";
 
 const router: Router = Router();
 
@@ -21,8 +25,8 @@ const limiter = (max?: number, time?: number, key?: string) => {
 
 const limiterAuth = limiter(10, 5, "body.email");
 
-router.post("/login", limiterAuth, controller.login);
-router.post("/register", limiterAuth, controller.register);
+router.post("/login", limiterAuth, registerValidator, controller.login);
+router.post("/register", limiterAuth, registerValidator, controller.register);
 router.post("/logout", controller.logout);
 router.post("/google", controller.googleLogin);
 router.get("/profile", authMiddleware.isAccess, controller.getInfo);
@@ -35,6 +39,7 @@ router.patch(
 router.patch(
   "/profile/edit",
   authMiddleware.isAccess,
+  updateProfileValidator,
   controller.updateProfile
 );
 router.patch(
