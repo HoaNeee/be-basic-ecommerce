@@ -62,13 +62,14 @@ const getTrackedList = function (req, res) {
         try {
             const last_tracked_list = req.session["last_tracked_list"] || [];
             const last_tracked = last_tracked_list[last_tracked_list.length - 1];
+            console.log(last_tracked);
             if (last_tracked && last_tracked.type_track === TRACK_TYPES.PRODUCT) {
                 const product = yield getProductWithVariations(last_tracked.value);
                 if (product) {
                     const suggestions = getProductSuggestions(product);
                     const response = {
                         code: HTTP_STATUS.OK,
-                        message: "Success",
+                        message: "Suggestions Success",
                         data: {
                             data: product,
                             data_type: "product",
@@ -105,20 +106,20 @@ const getProductSuggestions = (product) => {
         return [];
     return [
         {
-            title: `Tôi muốn xem chi tiết sản phẩm "${product.title}"`,
-            value: `Tôi muốn xem chi tiết sản phẩm "${product.title}" có mã "${product.slug}"`,
+            title: `Tôi muốn xem chi tiết sản phẩm '${product.title}'`,
+            value: `Tôi muốn xem chi tiết sản phẩm '${product.title}' có mã '${product.slug}'`,
             type: "product_detail",
             priority: 1,
         },
         {
-            title: `Tôi muốn tìm sản phẩm tương tự "${product.title}"`,
-            value: `Tôi muốn tìm sản phẩm tương tự "${product.title}" có mã "${product.slug}"`,
+            title: `Tôi muốn tìm sản phẩm tương tự '${product.title}'`,
+            value: `Tôi muốn tìm sản phẩm tương tự '${product.title}' có mã '${product.slug}'`,
             type: "similar_product",
             priority: 2,
         },
         {
-            title: `Tôi muốn biết số lượng còn lại của sản phẩm "${product.title}"`,
-            value: `Tôi muốn biết số lượng còn lại của sản phẩm "${product.title}" có mã "${product.slug}"`,
+            title: `Tôi muốn biết số lượng còn lại của sản phẩm '${product.title}'`,
+            value: `Tôi muốn biết số lượng còn lại của sản phẩm '${product.title}' có mã '${product.slug}'`,
             type: "stock_check",
             priority: 3,
         },

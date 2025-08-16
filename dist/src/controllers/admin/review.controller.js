@@ -37,8 +37,8 @@ const reviews = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             });
             find_customers = Object.assign(Object.assign({}, find_customers), { $and: filterWords });
         }
-        const customers = yield customer_model_1.default.find(find_customers);
-        const cus_ids = customers.map((item) => item.id);
+        const customers = yield customer_model_1.default.find(find_customers).lean();
+        const cus_ids = customers.map((item) => String(item._id));
         if (keyword) {
             find["user_id"] = { $in: cus_ids };
         }
@@ -49,7 +49,7 @@ const reviews = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const totalRecord = yield review_model_1.default.countDocuments(find);
         const initPagination = {
             page: 1,
-            limitItems: totalRecord,
+            limitItems: 10,
         };
         if (req.query.limit) {
             initPagination.limitItems = Number(req.query.limit);
@@ -64,14 +64,14 @@ const reviews = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const comments = yield comment_model_1.default.find({
             deleted: false,
             review_id: { $in: rvIds },
-        });
-        const products = yield product_model_1.default.find({ _id: { $in: productIds } });
+        }).lean();
+        const products = yield product_model_1.default.find({ _id: { $in: productIds } }).lean();
         for (const review of reviews) {
-            const cus = customers.find((item) => String(item.id) === review.user_id);
-            const product = products.find((item) => item.id === review.product_id);
+            const cus = customers.find((item) => String(item._id) === review.user_id);
+            const product = products.find((item) => String(item._id) === review.product_id);
             if (cus) {
-                review["product"] = product.toObject();
-                review["customer"] = cus.toObject();
+                review["product"] = product;
+                review["customer"] = cus;
                 review["commentCount"] = comments.filter((it) => it.review_id === String(review._id)).length;
             }
         }
@@ -201,7 +201,7 @@ const statistics = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             message: "OK",
             data: {
                 totalReviews,
-                averageRating: averageRating.toFixed(2)
+                averageRating: averageRating.toFixed(2),
             },
         });
     }

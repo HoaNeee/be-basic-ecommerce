@@ -32,9 +32,9 @@ export const reviews = async (req: Request, res: Response) => {
       };
     }
 
-    const customers = await Customer.find(find_customers);
+    const customers = await Customer.find(find_customers).lean();
 
-    const cus_ids = customers.map((item) => item.id);
+    const cus_ids = customers.map((item) => String(item._id));
 
     if (keyword) {
       find["user_id"] = { $in: cus_ids };
@@ -49,7 +49,7 @@ export const reviews = async (req: Request, res: Response) => {
 
     const initPagination = {
       page: 1,
-      limitItems: totalRecord,
+      limitItems: 10,
     };
 
     if (req.query.limit) {
@@ -69,17 +69,19 @@ export const reviews = async (req: Request, res: Response) => {
     const comments = await Comment.find({
       deleted: false,
       review_id: { $in: rvIds },
-    });
+    }).lean();
 
-    const products = await Product.find({ _id: { $in: productIds } });
+    const products = await Product.find({ _id: { $in: productIds } }).lean();
 
     for (const review of reviews) {
-      const cus = customers.find((item) => String(item.id) === review.user_id);
-      const product = products.find((item) => item.id === review.product_id);
+      const cus = customers.find((item) => String(item._id) === review.user_id);
+      const product = products.find(
+        (item) => String(item._id) === review.product_id
+      );
 
       if (cus) {
-        review["product"] = product.toObject();
-        review["customer"] = cus.toObject();
+        review["product"] = product;
+        review["customer"] = cus;
         review["commentCount"] = comments.filter(
           (it) => it.review_id === String(review._id)
         ).length;
@@ -249,17 +251,17 @@ export const statistics = async (req: Request, res: Response) => {
 
     const totalReviews = reviews.length;
 
-    const averageRating = reviews.reduce((acc, review) => {
-      return acc + review.star;
-    }
-    , 0) / totalReviews;
+    const averageRating =
+      reviews.reduce((acc, review) => {
+        return acc + review.star;
+      }, 0) / totalReviews;
 
     res.json({
       code: 200,
       message: "OK",
       data: {
         totalReviews,
-        averageRating: averageRating.toFixed(2)
+        averageRating: averageRating.toFixed(2),
       },
     });
   } catch (error) {

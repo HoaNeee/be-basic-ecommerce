@@ -961,7 +961,10 @@ export const remove = async (req: Request, res: Response) => {
     });
     if (subProducts.length > 0) {
       const ids = subProducts.map((item) => item.id);
-      await SubProductOption.deleteMany({ sub_product_id: { $in: ids } });
+      await SubProductOption.updateMany(
+        { sub_product_id: { $in: ids } },
+        { deleted: true, deletedAt: new Date() }
+      );
       await SubProduct.updateMany(
         { product_id: { $in: [product_id] } },
         { deleted: true, deletedAt: new Date() }
@@ -1013,9 +1016,15 @@ export const removeSubProduct = async (req: Request, res: Response) => {
     //   { deleted: true, deletedAt: new Date() }
     // );
 
-    await SubProductOption.deleteMany({
-      sub_product_id: { $in: [subProduct.id] },
-    });
+    await SubProductOption.updateMany(
+      {
+        sub_product_id: { $in: [subProduct.id] },
+      },
+      {
+        deleted: true,
+        deletedAt: new Date(),
+      }
+    );
 
     subProduct.deleted = true;
     subProduct.deletedAt = new Date();
@@ -1047,7 +1056,10 @@ export const changeMulti = async (req: Request, res: Response) => {
         });
         const ids = subProducts.map((sub) => sub.id);
 
-        await SubProductOption.deleteMany({ sub_product_id: { $in: ids } });
+        await SubProductOption.updateMany(
+          { sub_product_id: { $in: ids } },
+          { deleted: true, deletedAt: new Date() }
+        );
         await SubProduct.updateMany(
           { _id: { $in: ids } },
           { deleted: true, deletedAt: new Date() }
@@ -2343,15 +2355,24 @@ const changeTrashAllHelper = async (
         { deleted: false, deletedAt: null }
       );
       if (checkedSubProduct && type === "product") {
-        await SubProduct.updateMany(
-          { deleted: true },
-          { deleted: false, deletedAt: null }
-        );
+        await Promise.all([
+          SubProductOption.updateMany(
+            { deleted: true },
+            { deleted: false, deletedAt: null }
+          ),
+          SubProduct.updateMany(
+            { deleted: true },
+            { deleted: false, deletedAt: null }
+          ),
+        ]);
       }
     } else if (action === "delete") {
       await Model.deleteMany({ deleted: true });
       if (checkedSubProduct && type === "product") {
-        await SubProduct.deleteMany({ deleted: true });
+        await Promise.all([
+          SubProductOption.deleteMany({ deleted: true }),
+          SubProduct.deleteMany({ deleted: true }),
+        ]);
       }
     }
 

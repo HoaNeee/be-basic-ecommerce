@@ -74,7 +74,6 @@ const getHistoryChat = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.getHistoryChat = getHistoryChat;
 const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
     try {
         if (!API_KEY) {
             res.json({ code: 500, message: "API key is not set" });
@@ -84,7 +83,8 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             req.session["sid"] = req.sessionID;
         }
         const sessionId = req.session["sid"];
-        const chat = yield createOrGetChatHistory(chatHistory, sessionId);
+        const user_id = req.userId || "";
+        const chat = yield createOrGetChatHistory(chatHistory, user_id || sessionId);
         const input = req.body.message ||
             `Xin chào, bạn thế nào? Chúng ta có thể nói chuyện không!`;
         if (!input || input.trim() === "") {
@@ -96,47 +96,7 @@ const chatBot = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         }
         const action = req.body.action || "ask";
         if (action === "suggest") {
-            const type = req.body.type;
-            const cached = yield checkCaching(input);
-            if (cached) {
-                const collection_name = ((_a = cached.query) === null || _a === void 0 ? void 0 : _a.collection_name) || "products";
-                const vector_ids = cached.response;
-                const products = yield getProductWithVectorIds(vector_ids, collection_name);
-                req.session["userState"] = {
-                    lastIntent: "search_product",
-                    new: true,
-                    query: {
-                        input: input,
-                        productType: collection_name === "products" ? "simple" : "variations",
-                        points: vector_ids,
-                    },
-                };
-                return yield promptProduct(req, res, input, chat, type, products);
-            }
-            console.log(type, action);
-            if (type === "search_product") {
-                const products = yield getProducts(input, {}, req);
-                return yield promptProduct(req, res, input, chat, type, products);
-            }
-            const product = yield getProductUsingInput(input);
-            if (!product) {
-                res.json({
-                    code: 404,
-                    message: "Product not found",
-                });
-                return;
-            }
-            if (type === "similar_product") {
-                const object = {
-                    categories: product.categories || [],
-                    productType: "simple",
-                };
-                const similar_products = yield getProducts(input, object, req);
-                return yield promptProduct(req, res, input, chat, "search_product", similar_products);
-            }
-            if (type === "product_detail") {
-                return yield promptProductDetail(req, res, input, chat, type, product);
-            }
+            return yield solveAction(action, req, res, input, chat);
         }
         const intent = yield getIntent(input, req, res, chat);
         console.log("intent", intent);
@@ -200,6 +160,16 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
                 };
                 yield promptProduct(req, res, input, chatModel, intent, products);
                 return "";
+            }
+            if (intent === "product_detail") {
+                const id = cached.response.length > 0 ? cached.response[0] : null;
+                const product = yield product_model_1.default.findOne({
+                    _id: id,
+                    deleted: false,
+                }).lean();
+                if (product) {
+                    return yield promptProductDetail(req, res, input, chatModel, intent, product);
+                }
             }
             return intent;
         }
@@ -318,7 +288,7 @@ const promptProductDetail = (req, res, input, chat, intent, product) => __awaite
         - Hỏi xem người dùng có muốn qua trang chi tiết sản phẩm không.
         - Bạn có thể đưa link chi tiết sản phẩm vào (nếu sử dụng thẻ a, hãy thêm 1 chút css), link chi tiết sản phẩm là: ${DOMAIN}/shop/slug-product
         - Hỏi xem người dùng có muốn tự động chuyển hướng đến trang chi tiết sản phẩm không, nếu có hãy trả về thêm trường "auto_redirect": true, và "redirect_url": "${DOMAIN}/shop/slug-product", tôi sẽ tự re-direct người dùng đến trang chi tiết sản phẩm.
-        - Hãy nhớ luôn hỏi người dùng trước khi muốn tự động chuyển hướng, nếu người dùng khẳng định muốn tự động chuyển hướng thì hãy trả về trường auto_redirect là true và redirect_url là đường dẫn mà bạn muốn chuyển hướng.
+        - Hãy nhớ luôn hỏi người dùng trước khi muốn tự động chuyển hướng, nếu người dùng muốn tự động chuyển hướng thì hãy trả về trường auto_redirect là true và redirect_url là đường dẫn mà bạn muốn chuyển hướng.
         - Nếu người dùng xác nhận muốn tự động chuyển hướng thì hãy mô phỏng timeout 2 giây (css cho spin, hoặc bạn có thể làm gì đó) để tôi có thể tự động chuyển hướng đến trang chi tiết sản phẩm.
         - Trả lời đúng format dưới dạng JSON như sau: 
         {
@@ -641,8 +611,9 @@ const getCategoriesAndOptions = () => __awaiter(void 0, void 0, void 0, function
 const getProductUsingInput = (input) => __awaiter(void 0, void 0, void 0, function* () {
     const existSlug = input.includes("mã") || input.includes("slug") || input.includes("id");
     let product = null;
+    const newInput = input;
     if (existSlug) {
-        let slug = input.substring(input.indexOf("mã") + 2).trim();
+        let slug = newInput.substring(newInput.indexOf("mã") + 2).trim();
         slug = slug.replace(/["']/g, "");
         if (slug) {
             product = yield product_model_1.default.findOne({ slug }).lean();
@@ -660,6 +631,10 @@ const getProductUsingInput = (input) => __awaiter(void 0, void 0, void 0, functi
             product.supplierName = supplier.name;
         }
     }
+    yield cachedHelper([String(product._id)], {
+        collection_name: "products",
+        intent: "product_detail",
+    }, newInput);
     return product;
 });
 const formattedChatHelper = (chatHistory) => {
@@ -879,5 +854,62 @@ const checkCaching = (input) => __awaiter(void 0, void 0, void 0, function* () {
     }
     catch (error) {
         throw error;
+    }
+});
+const solveAction = (action, req, res, input, chat) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    const type = req.body.type;
+    const cached = yield checkCaching(input);
+    if (cached) {
+        const intent = ((_a = cached.query) === null || _a === void 0 ? void 0 : _a.intent) || "search_product";
+        if (intent === "search_product") {
+            const collection_name = ((_b = cached.query) === null || _b === void 0 ? void 0 : _b.collection_name) || "products";
+            const vector_ids = cached.response;
+            const products = yield getProductWithVectorIds(vector_ids, collection_name);
+            req.session["userState"] = {
+                lastIntent: "search_product",
+                new: true,
+                query: {
+                    input: input,
+                    productType: collection_name === "products" ? "simple" : "variations",
+                    points: vector_ids,
+                },
+            };
+            return yield promptProduct(req, res, input, chat, type, products);
+        }
+        if (intent === "product_detail" || intent === "stock_check") {
+            const id = cached.response.length > 0 ? cached.response[0] : null;
+            const product = yield product_model_1.default.findOne({
+                _id: id,
+                deleted: false,
+            });
+            if (product) {
+                return yield promptProductDetail(req, res, input, chat, intent, product);
+            }
+        }
+    }
+    console.log(type, action);
+    if (type === "search_product") {
+        const products = yield getProducts(input, {}, req);
+        return yield promptProduct(req, res, input, chat, type, products);
+    }
+    const product = yield getProductUsingInput(input);
+    if (!product) {
+        res.json({
+            code: 404,
+            message: "Product not found",
+        });
+        return;
+    }
+    if (type === "similar_product") {
+        const object = {
+            categories: product.categories || [],
+            productType: "simple",
+        };
+        const similar_products = yield getProducts(input, object, req);
+        return yield promptProduct(req, res, input, chat, "search_product", similar_products);
+    }
+    if (type === "product_detail" || type === "stock_check") {
+        return yield promptProductDetail(req, res, input, chat, type, product);
     }
 });

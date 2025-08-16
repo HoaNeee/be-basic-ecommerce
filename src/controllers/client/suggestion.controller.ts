@@ -25,7 +25,7 @@ const HTTP_STATUS = {
 // [POST] /suggestions/track
 export const trackSuggestion = (req: Request, res: Response) => {
   try {
-    const { action, value, type_track }: TrackSuggestionRequest = req.body;
+    const { action, value, type_track } = req.body;
 
     const last_tracked_list: TrackedItem[] =
       req.session["last_tracked_list"] || [];
@@ -33,7 +33,7 @@ export const trackSuggestion = (req: Request, res: Response) => {
     const trackedItem: TrackedItem = {
       action,
       value,
-      type_track: type_track as TrackedItem["type_track"],
+      type_track: type_track,
       timestamp: new Date(),
     };
 
@@ -70,6 +70,7 @@ export const getTrackedList = async function (
       req.session["last_tracked_list"] || [];
     const last_tracked = last_tracked_list[last_tracked_list.length - 1];
 
+    console.log(last_tracked);
     if (last_tracked && last_tracked.type_track === TRACK_TYPES.PRODUCT) {
       const product = await getProductWithVariations(last_tracked.value);
 
@@ -78,7 +79,7 @@ export const getTrackedList = async function (
 
         const response: SuggestionResponse = {
           code: HTTP_STATUS.OK,
-          message: "Success",
+          message: "Suggestions Success",
           data: {
             data: product,
             data_type: "product",
@@ -116,20 +117,20 @@ const getProductSuggestions = (product: any): SuggestionItem[] => {
 
   return [
     {
-      title: `Tôi muốn xem chi tiết sản phẩm "${product.title}"`,
-      value: `Tôi muốn xem chi tiết sản phẩm "${product.title}" có mã "${product.slug}"`,
+      title: `Tôi muốn xem chi tiết sản phẩm '${product.title}'`,
+      value: `Tôi muốn xem chi tiết sản phẩm '${product.title}' có mã '${product.slug}'`,
       type: "product_detail",
       priority: 1,
     },
     {
-      title: `Tôi muốn tìm sản phẩm tương tự "${product.title}"`,
-      value: `Tôi muốn tìm sản phẩm tương tự "${product.title}" có mã "${product.slug}"`,
+      title: `Tôi muốn tìm sản phẩm tương tự '${product.title}'`,
+      value: `Tôi muốn tìm sản phẩm tương tự '${product.title}' có mã '${product.slug}'`,
       type: "similar_product",
       priority: 2,
     },
     {
-      title: `Tôi muốn biết số lượng còn lại của sản phẩm "${product.title}"`,
-      value: `Tôi muốn biết số lượng còn lại của sản phẩm "${product.title}" có mã "${product.slug}"`,
+      title: `Tôi muốn biết số lượng còn lại của sản phẩm '${product.title}'`,
+      value: `Tôi muốn biết số lượng còn lại của sản phẩm '${product.title}' có mã '${product.slug}'`,
       type: "stock_check",
       priority: 3,
     },

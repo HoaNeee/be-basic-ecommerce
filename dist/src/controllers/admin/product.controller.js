@@ -747,7 +747,7 @@ const remove = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
         if (subProducts.length > 0) {
             const ids = subProducts.map((item) => item.id);
-            yield subProductOption_model_1.default.deleteMany({ sub_product_id: { $in: ids } });
+            yield subProductOption_model_1.default.updateMany({ sub_product_id: { $in: ids } }, { deleted: true, deletedAt: new Date() });
             yield subProduct_model_1.default.updateMany({ product_id: { $in: [product_id] } }, { deleted: true, deletedAt: new Date() });
         }
         product.deleted = true;
@@ -784,8 +784,11 @@ const removeSubProduct = (req, res) => __awaiter(void 0, void 0, void 0, functio
         if (!subProduct) {
             throw Error("Not found!!");
         }
-        yield subProductOption_model_1.default.deleteMany({
+        yield subProductOption_model_1.default.updateMany({
             sub_product_id: { $in: [subProduct.id] },
+        }, {
+            deleted: true,
+            deletedAt: new Date(),
         });
         subProduct.deleted = true;
         subProduct.deletedAt = new Date();
@@ -814,7 +817,7 @@ const changeMulti = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                     deleted: false,
                 });
                 const ids = subProducts.map((sub) => sub.id);
-                yield subProductOption_model_1.default.deleteMany({ sub_product_id: { $in: ids } });
+                yield subProductOption_model_1.default.updateMany({ sub_product_id: { $in: ids } }, { deleted: true, deletedAt: new Date() });
                 yield subProduct_model_1.default.updateMany({ _id: { $in: ids } }, { deleted: true, deletedAt: new Date() });
                 yield syncEmbedProductData({
                     ids: payload,
@@ -1839,13 +1842,19 @@ const changeTrashAllHelper = (action_1, checkedSubProduct_1, req_1, res_1, Model
         if (action === "restore") {
             yield Model.updateMany({ deleted: true }, { deleted: false, deletedAt: null });
             if (checkedSubProduct && type === "product") {
-                yield subProduct_model_1.default.updateMany({ deleted: true }, { deleted: false, deletedAt: null });
+                yield Promise.all([
+                    subProductOption_model_1.default.updateMany({ deleted: true }, { deleted: false, deletedAt: null }),
+                    subProduct_model_1.default.updateMany({ deleted: true }, { deleted: false, deletedAt: null }),
+                ]);
             }
         }
         else if (action === "delete") {
             yield Model.deleteMany({ deleted: true });
             if (checkedSubProduct && type === "product") {
-                yield subProduct_model_1.default.deleteMany({ deleted: true });
+                yield Promise.all([
+                    subProductOption_model_1.default.deleteMany({ deleted: true }),
+                    subProduct_model_1.default.deleteMany({ deleted: true }),
+                ]);
             }
         }
         res.json({
