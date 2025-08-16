@@ -2,7 +2,11 @@ import mongoose from "mongoose";
 
 const schema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
-  isSent: { type: Boolean, default: false },
+  status: {
+    type: String,
+    enum: ["sent", "not-sent", "cancel"],
+    default: "not-sent",
+  },
   subscribedAt: { type: Date, default: Date.now },
 });
 

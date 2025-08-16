@@ -161,6 +161,7 @@ export const update = async (req: Request, res: Response) => {
       data: blog,
     });
   } catch (error: any) {
+    console.log(error);
     res.json({
       code: 500,
       message: error.message,

@@ -16,6 +16,7 @@ import reviewRoute from "./review.route";
 import blogRouter from "./blog.route";
 import aiAssistantRouter from "./AIAssistant.route";
 import subscriberRouter from "./subscriber.route";
+import customerContactRouter from "./customerContact.route";
 
 const route = (app: Express) => {
   const path = "/admin";
@@ -36,6 +37,7 @@ const route = (app: Express) => {
   app.use(path + "/reviews", auth.isAccess, reviewRoute);
   app.use(path + "/blogs", auth.isAccess, blogRouter);
   app.use(path + "/subscribers", auth.isAccess, subscriberRouter);
+  app.use(path + "/customer-contacts", auth.isAccess, customerContactRouter);
   app.use(path + "/ai-assistant", auth.isAccess, aiAssistantRouter);
 };
 

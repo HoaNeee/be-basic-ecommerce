@@ -151,6 +151,7 @@ const update = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
     catch (error) {
+        console.log(error);
         res.json({
             code: 500,
             message: error.message,

@@ -6,7 +6,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importDefault(require("mongoose"));
 const schema = new mongoose_1.default.Schema({
     email: { type: String, required: true, unique: true },
-    isSent: { type: Boolean, default: false },
+    status: {
+        type: String,
+        enum: ["sent", "not-sent", "cancel"],
+        default: "not-sent",
+    },
     subscribedAt: { type: Date, default: Date.now },
 });
 const Subscriber = mongoose_1.default.model("Subscriber", schema, "subscribers");

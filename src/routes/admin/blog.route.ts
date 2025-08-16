@@ -11,9 +11,9 @@ router.get("/:id", controller.blogDetail);
 router.post("/", controller.create);
 
 router.patch("/change-multi", controller.changeMulti);
-router.patch("/change-trash/:blogId", controller.changeTrashOne);
-router.patch("/bulk-trash", controller.bulkChangeTrash);
 router.patch("/change-trash-all", controller.changeTrashAll);
+router.patch("/bulk-trash", controller.bulkChangeTrash);
+router.patch("/change-trash/:blogId", controller.changeTrashOne);
 router.patch("/edit/:id", controller.update);
 
 router.delete("/:id", controller.remove);

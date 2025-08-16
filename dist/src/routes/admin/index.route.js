@@ -53,6 +53,7 @@ const review_route_1 = __importDefault(require("./review.route"));
 const blog_route_1 = __importDefault(require("./blog.route"));
 const AIAssistant_route_1 = __importDefault(require("./AIAssistant.route"));
 const subscriber_route_1 = __importDefault(require("./subscriber.route"));
+const customerContact_route_1 = __importDefault(require("./customerContact.route"));
 const route = (app) => {
     const path = "/admin";
     app.use(path + "/auth", auth_route_1.default);
@@ -70,6 +71,7 @@ const route = (app) => {
     app.use(path + "/reviews", auth.isAccess, review_route_1.default);
     app.use(path + "/blogs", auth.isAccess, blog_route_1.default);
     app.use(path + "/subscribers", auth.isAccess, subscriber_route_1.default);
+    app.use(path + "/customer-contacts", auth.isAccess, customerContact_route_1.default);
     app.use(path + "/ai-assistant", auth.isAccess, AIAssistant_route_1.default);
 };
 exports.default = route;
