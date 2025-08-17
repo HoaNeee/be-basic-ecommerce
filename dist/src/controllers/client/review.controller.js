@@ -105,8 +105,12 @@ exports.getComments = getComments;
 const create = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user_id = req.userId;
+        const product_id = req.params.product_id;
+        if (!product_id) {
+            throw Error("Missing product_id");
+        }
         const body = req.body;
-        const review = new review_model_1.default(Object.assign(Object.assign({}, body), { user_id: user_id }));
+        const review = new review_model_1.default(Object.assign(Object.assign({}, body), { user_id: user_id, product_id: product_id }));
         yield review.save();
         res.json({
             code: 200,
@@ -126,8 +130,12 @@ exports.create = create;
 const createComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user_id = req.userId;
+        const review_id = req.params.review_id;
+        if (!review_id) {
+            throw Error("Missing review_id");
+        }
         const body = req.body;
-        const comment = new comment_model_1.default(Object.assign(Object.assign({}, body), { user_id: user_id }));
+        const comment = new comment_model_1.default(Object.assign(Object.assign({}, body), { user_id: user_id, review_id: review_id }));
         yield comment.save();
         res.json({
             code: 200,

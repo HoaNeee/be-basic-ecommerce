@@ -154,7 +154,12 @@ const transactionDetail = (req, res) => __awaiter(void 0, void 0, void 0, functi
                     item["SKU"] = products[indexProduct].SKU;
                 }
             }
-            transaction["cart_items_info"] = cart_items_info;
+            if (req.session["cart_checkout"]) {
+                transaction["cart_items_info"] = req.session["cart_checkout"];
+            }
+            else {
+                transaction["cart_items_info"] = cart_items_info;
+            }
         }
         res.json({
             code: 200,

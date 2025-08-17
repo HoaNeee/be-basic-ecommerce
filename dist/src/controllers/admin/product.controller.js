@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkEmbedProduct = exports.changeIndexed = exports.getAllProductID = exports.syncEmbedTime = exports.deleteEmbedProduct = exports.getProductNotEmbeded = exports.getEmbedStatistic = exports.getEmbedSubProduct = exports.syncEmbedProduct = exports.getEmbedProduct = exports.embedProduct = exports.changeSubProductTrashAll = exports.changeTrashAll = exports.bulkChangeSubProductTrash = exports.bulkChangeTrash = exports.changeSubproductTrashOne = exports.changeTrashOne = exports.trashSubProducts = exports.trashProducts = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct_v2 = exports.editSubProduct = exports.edit = exports.create = exports.detail_v2 = exports.products = void 0;
+exports.bulkEmbedProduct = exports.changeIndexed = exports.getAllProductID = exports.syncEmbedTime = exports.deleteEmbedProduct = exports.getProductNotEmbeded = exports.getEmbedStatistic = exports.getEmbedSubProduct = exports.syncEmbedProduct = exports.getEmbedProduct = exports.embedProduct = exports.changeSubProductTrashAll = exports.changeTrashAll = exports.bulkChangeSubProductTrash = exports.bulkChangeTrash = exports.changeSubproductTrashOne = exports.changeTrashOne = exports.trashSubProducts = exports.trashProducts = exports.lowQuantity = exports.topSell = exports.productsSKU = exports.getAllSKU = exports.changeMulti = exports.removeSubProduct = exports.remove = exports.filterProduct = exports.getPriceProduct = exports.editSubProduct_v2 = exports.edit = exports.create = exports.detail_v2 = exports.products = void 0;
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const subProductOption_model_1 = __importDefault(require("../../models/subProductOption.model"));
@@ -394,84 +394,6 @@ const edit = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.edit = edit;
-const editSubProduct = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const product_id = req.params.id;
-        const subProducts = req.body.subProducts;
-        const combinations = req.body.combinations;
-        const product = yield product_model_1.default.findOne({ _id: product_id, deleted: false });
-        if (!product) {
-            throw Error("product is not found");
-        }
-        if (product.productType !== ProductType.VARIATION) {
-            product.productType = ProductType.VARIATION;
-            yield product.save();
-        }
-        for (const item of subProducts) {
-            if (item.sub_product_id) {
-                yield subProduct_model_1.default.updateOne({ _id: item.sub_product_id }, {
-                    price: (item === null || item === void 0 ? void 0 : item.price) || 0,
-                    stock: (item === null || item === void 0 ? void 0 : item.stock) || 0,
-                    thumbnail: (item === null || item === void 0 ? void 0 : item.thumbnail) || "",
-                    discountedPrice: (item === null || item === void 0 ? void 0 : item.discountedPrice) || null,
-                    SKU: (item === null || item === void 0 ? void 0 : item.SKU) || "",
-                });
-            }
-        }
-        const dataSubProducts = yield subProduct_model_1.default.find({
-            product_id: product_id,
-            deleted: false,
-        });
-        const keys_combination = combinations.map((item) => item
-            .map((it) => it.value)
-            .sort((a, b) => (a < b ? 1 : -1))
-            .join("-"));
-        for (const item of dataSubProducts) {
-            const subOptions = yield subProductOption_model_1.default.find({
-                sub_product_id: item.id,
-                deleted: false,
-            });
-            const key = subOptions
-                .map((sop) => sop.variation_option_id)
-                .sort((a, b) => (a < b ? 1 : -1))
-                .join("-");
-            if (keys_combination.includes(key)) {
-                const index = keys_combination.findIndex((item) => item === key);
-                if (index !== -1) {
-                    keys_combination.splice(index, 1);
-                }
-            }
-            else {
-                const ids = subOptions.map((sop) => sop.id);
-                yield subProductOption_model_1.default.deleteMany({ _id: { $in: ids } });
-                yield subProduct_model_1.default.updateOne({ _id: item._id }, { deleted: true, deletedAt: new Date() });
-            }
-        }
-        for (const item of keys_combination) {
-            const newSubProduct = new subProduct_model_1.default({ product_id: product_id });
-            const options = item.split("-");
-            for (const opt of options) {
-                const subProductOption = new subProductOption_model_1.default({
-                    variation_option_id: opt,
-                    sub_product_id: newSubProduct.id,
-                });
-                yield subProductOption.save();
-            }
-            yield newSubProduct.save();
-        }
-        res.json({
-            code: 200,
-            message: "Successfully!",
-        });
-    }
-    catch (error) {
-        res.json({
-            code: 400,
-            message: error.message || error,
-        });
-    }
-});
-exports.editSubProduct = editSubProduct;
 const editSubProduct_v2 = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const product_id = req.params.id;

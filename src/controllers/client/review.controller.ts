@@ -98,16 +98,22 @@ export const getComments = async (req: MyRequest, res: Response) => {
   }
 };
 
-// [POST] /reviews/create
+// [POST] /reviews/create/:product_id
 export const create = async (req: MyRequest, res: Response) => {
   try {
     const user_id = req.userId;
+    const product_id = req.params.product_id;
+
+    if (!product_id) {
+      throw Error("Missing product_id");
+    }
 
     const body = req.body;
 
     const review = new Review({
       ...body,
       user_id: user_id,
+      product_id: product_id,
     });
 
     await review.save();
@@ -126,16 +132,22 @@ export const create = async (req: MyRequest, res: Response) => {
   }
 };
 
-// [POST] /reviews/create-comment
+// [POST] /reviews/create-comment/:review_id
 export const createComment = async (req: MyRequest, res: Response) => {
   try {
     const user_id = req.userId;
+    const review_id = req.params.review_id;
+
+    if (!review_id) {
+      throw Error("Missing review_id");
+    }
 
     const body = req.body;
 
     const comment = new Comment({
       ...body,
       user_id: user_id,
+      review_id: review_id,
     });
 
     await comment.save();

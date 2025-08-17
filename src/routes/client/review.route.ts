@@ -8,9 +8,9 @@ router.get("/", controller.reviews);
 router.get("/comments/:review_id", controller.getComments);
 router.get("/top-reviews", controller.topReviews);
 
-router.post("/create", authMiddleware.isAccess, controller.create);
+router.post("/create/:product_id", authMiddleware.isAccess, controller.create);
 router.post(
-  "/create-comment",
+  "/create-comment/:review_id",
   authMiddleware.isAccess,
   controller.createComment
 );

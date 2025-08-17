@@ -15,6 +15,12 @@ const schema = new Schema(
         quantity: Number,
         cost: Number,
         SKU: String,
+        product_id: String,
+        sub_product_id: String,
+        reviewed: {
+          type: Boolean,
+          default: false,
+        },
       },
     ],
     promotion: {

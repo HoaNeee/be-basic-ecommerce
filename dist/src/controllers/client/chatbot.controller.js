@@ -447,53 +447,6 @@ const getBlogs = (input) => __awaiter(void 0, void 0, void 0, function* () {
         throw error;
     }
 });
-const getProductsWithFields = (input, req) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        let [categoriesMap] = yield getCategoriesAndOptions();
-        const prompt = `Bạn là một trợ lý ảo của một trang web bán hàng, nhiệm vụ của bạn là phân tích yêu cầu của người dùng và xuất ra dữ liệu có cấu trúc dạng JSON theo mẫu bên dưới. Không cần giải thích gì thêm.
-
-    Người dùng hỏi: "${input}"
-
-    Dữ liệu tham khảo:
-    - Danh sách danh mục (dạng: tên:danh_mục_id): ${categoriesMap}
-
-    Yêu cầu:
-    - Nếu có nói về mức giá, hãy lấy giá trung bình (price), cùng với khoảng min_price và max_price dao động ±10%
-    - Nếu có tên danh mục sản phẩm phù hợp, trả về mảng 'categories' là danh sách '_id' tương ứng
-    - Trường 'productType' là "variations" nếu có biến thể, "simple" nếu không, biến thể là các tùy chọn như màu sắc, kích thước.. (nếu có).
-
-    Kết quả trả về chỉ là JSON theo mẫu sau:
-
-    {
-      "price": "100",
-      "min_price": "95",
-      "max_price": "105",
-      "categories": ["id1", "id2"],
-      "productType": "simple",
-    }
-    hoặc
-    {
-      "price": "100",
-      "min_price": "95",
-      "max_price": "105",
-      "categories": ["id1", "id2"],
-      "productType": "variations",
-    }
-   
-    `;
-        const response = yield gemAI.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-        });
-        const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);
-        const object = JSON.parse(output);
-        return yield getProducts(input, object, req);
-    }
-    catch (error) {
-        console.error("Error products:", error);
-        throw error;
-    }
-});
 const getProducts = (input, object, req) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const response = yield gemAI.models.embedContent({
@@ -911,5 +864,52 @@ const solveAction = (action, req, res, input, chat) => __awaiter(void 0, void 0,
     }
     if (type === "product_detail" || type === "stock_check") {
         return yield promptProductDetail(req, res, input, chat, type, product);
+    }
+});
+const getProductsWithFields = (input, req) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        let [categoriesMap] = yield getCategoriesAndOptions();
+        const prompt = `Bạn là một trợ lý ảo của một trang web bán hàng, nhiệm vụ của bạn là phân tích yêu cầu của người dùng và xuất ra dữ liệu có cấu trúc dạng JSON theo mẫu bên dưới. Không cần giải thích gì thêm.
+
+    Người dùng hỏi: "${input}"
+
+    Dữ liệu tham khảo:
+    - Danh sách danh mục (dạng: tên:danh_mục_id): ${categoriesMap}
+
+    Yêu cầu:
+    - Nếu có nói về mức giá, hãy lấy giá trung bình (price), cùng với khoảng min_price và max_price dao động ±10%
+    - Nếu có tên danh mục sản phẩm phù hợp, trả về mảng 'categories' là danh sách '_id' tương ứng
+    - Trường 'productType' là "variations" nếu có biến thể, "simple" nếu không, biến thể là các tùy chọn như màu sắc, kích thước.. (nếu có).
+
+    Kết quả trả về chỉ là JSON theo mẫu sau:
+
+    {
+      "price": "100",
+      "min_price": "95",
+      "max_price": "105",
+      "categories": ["id1", "id2"],
+      "productType": "simple",
+    }
+    hoặc
+    {
+      "price": "100",
+      "min_price": "95",
+      "max_price": "105",
+      "categories": ["id1", "id2"],
+      "productType": "variations",
+    }
+   
+    `;
+        const response = yield gemAI.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+        const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);
+        const object = JSON.parse(output);
+        return yield getProducts(input, object, req);
+    }
+    catch (error) {
+        console.error("Error products:", error);
+        throw error;
     }
 });

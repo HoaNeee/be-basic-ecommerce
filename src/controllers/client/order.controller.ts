@@ -9,6 +9,10 @@ import Customer from "../../models/customer.model";
 import Pagination from "../../../helpers/pagination";
 import { getIo } from "../../../socket";
 import Promotion from "../../models/promotion.model";
+import Product from "../../models/product.model";
+import Review from "../../models/review.model";
+import SubProduct from "../../models/subProduct.model";
+import Cart from "../../models/cart.model";
 
 interface TemplateHTMLOrder {
   cusName: string;
@@ -427,6 +431,210 @@ export const changeStatus = async (req: MyRequest, res: Response) => {
     console.log(error);
     res.json({
       code: 400,
+      message: error.message || error,
+    });
+  }
+};
+
+//[GET] /orders/products-info/:order_no
+export const getProductInfo = async (req: MyRequest, res: Response) => {
+  try {
+    const order_no = req.params.order_no;
+    const user_id = req.userId;
+
+    const order = await Order.findOne({ orderNo: order_no });
+
+    if (!order) {
+      res.status(404).json({
+        code: 404,
+        message: "Order not found",
+      });
+      return;
+    }
+
+    if (order.user_id !== user_id) {
+      res.status(403).json({
+        code: 403,
+        message: "Forbidden",
+      });
+      return;
+    }
+
+    const set = new Set(order.products.map((item) => item.product_id));
+
+    const ids = Array.from(set);
+
+    const products = await Product.find({ _id: { $in: ids } }).lean();
+
+    for (const product of products) {
+      const orderItem = order.products.find(
+        (item) => item.product_id === String(product._id)
+      );
+      if (orderItem) {
+        product["reviewed"] = orderItem.reviewed;
+      }
+    }
+
+    res.status(200).json({
+      code: 200,
+      message: "Success",
+      data: products,
+    });
+  } catch (error) {
+    res.status(500).json({
+      code: 500,
+      message: error.message || error,
+    });
+  }
+};
+
+//[POST] /orders/review-multi
+export const reviewMultiProducts = async (req: MyRequest, res: Response) => {
+  try {
+    const { orderNo, data, ids } = req.body;
+    const user_id = req.userId;
+
+    const order = await Order.findOne({ orderNo: orderNo, user_id });
+
+    if (!order) {
+      res.status(404).json({
+        code: 404,
+        message: "Order not found",
+      });
+      return;
+    }
+
+    const products = await Product.find({ _id: { $in: ids } }).lean();
+
+    for (const product of products) {
+      const review = new Review({
+        ...data,
+        user_id: user_id,
+        product_id: String(product._id),
+      });
+
+      const orders = order.products.filter(
+        (item) => item.product_id === String(product._id)
+      );
+
+      if (orders.length > 0) {
+        orders.forEach((item) => {
+          item.reviewed = true;
+        });
+        await order.save();
+      }
+
+      await review.save();
+    }
+
+    res.status(200).json({
+      code: 200,
+      message: "Post multi review Success",
+    });
+  } catch (error) {
+    res.status(500).json({
+      code: 500,
+      message: error.message || error,
+    });
+  }
+};
+
+//[GET] /orders/products-info/:order_no
+export const getProductAndCreateCartItemReorder = async (
+  req: MyRequest,
+  res: Response
+) => {
+  try {
+    const order_no = req.params.order_no;
+    const user_id = req.userId;
+
+    const order = await Order.findOne({ orderNo: order_no }).lean();
+
+    if (!order) {
+      res.status(404).json({
+        code: 404,
+        message: "Order not found",
+      });
+      return;
+    }
+
+    if (order.user_id !== user_id) {
+      res.status(403).json({
+        code: 403,
+        message: "Forbidden",
+      });
+      return;
+    }
+
+    const set = new Set(order.products.map((item) => item.product_id));
+
+    const subIds = order.products.map((item) => item.sub_product_id);
+
+    const ids = Array.from(set);
+
+    const products = await Product.find({
+      _id: { $in: ids },
+      deleted: false,
+    })
+      .lean()
+      .select(
+        "title cost price discountedPrice stock slug _id productType SKU thumbnail"
+      );
+    const subProducts = await SubProduct.find({
+      _id: { $in: subIds },
+      deleted: false,
+    })
+      .lean()
+      .select("thumbnail product_id _id SKU price discountedPrice stock");
+
+    const data = [];
+
+    for (const product of order.products) {
+      const foundProduct = products.find(
+        (item) => String(item._id) === product.product_id
+      );
+      const foundSubProduct = subProducts.find(
+        (item) => String(item._id) === product.sub_product_id
+      );
+
+      if (foundSubProduct) {
+        data.push({
+          ...product,
+          ...foundProduct,
+          ...foundSubProduct,
+          thumbnail_product: foundSubProduct?.thumbnail || "",
+        });
+      } else if (foundProduct) {
+        data.push({
+          ...product,
+          ...foundProduct,
+        });
+      }
+    }
+
+    const carts = [];
+    for (const item of data) {
+      const cartItem = new CartDetail(item);
+      const object = {
+        ...item,
+        ...cartItem.toObject(),
+        cartItem_id: String(cartItem._id),
+      };
+      delete object.reviewed;
+      delete object.deleted;
+      carts.push(object);
+    }
+
+    req.session["cart_checkout"] = carts;
+
+    res.status(200).json({
+      code: 200,
+      message: "Success",
+      data: carts,
+    });
+  } catch (error) {
+    res.status(500).json({
+      code: 500,
       message: error.message || error,
     });
   }

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.changeStatus = exports.create = exports.detail = exports.orders = void 0;
+exports.getProductAndCreateCartItemReorder = exports.reviewMultiProducts = exports.getProductInfo = exports.changeStatus = exports.create = exports.detail = exports.orders = void 0;
 const order_model_1 = __importDefault(require("../../models/order.model"));
 const cartDetail_model_1 = __importDefault(require("../../models/cartDetail.model"));
 const order_1 = require("../../../utils/order");
@@ -22,6 +22,9 @@ const customer_model_1 = __importDefault(require("../../models/customer.model"))
 const pagination_1 = __importDefault(require("../../../helpers/pagination"));
 const socket_1 = require("../../../socket");
 const promotion_model_1 = __importDefault(require("../../models/promotion.model"));
+const product_model_1 = __importDefault(require("../../models/product.model"));
+const review_model_1 = __importDefault(require("../../models/review.model"));
+const subProduct_model_1 = __importDefault(require("../../models/subProduct.model"));
 const templateHtml = (order, req) => {
     const subTotal = order.products.reduce((val, item) => val + item.quantity * item.price, 0);
     return `
@@ -352,3 +355,150 @@ const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     }
 });
 exports.changeStatus = changeStatus;
+const getProductInfo = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const order_no = req.params.order_no;
+        const user_id = req.userId;
+        const order = yield order_model_1.default.findOne({ orderNo: order_no });
+        if (!order) {
+            res.status(404).json({
+                code: 404,
+                message: "Order not found",
+            });
+            return;
+        }
+        if (order.user_id !== user_id) {
+            res.status(403).json({
+                code: 403,
+                message: "Forbidden",
+            });
+            return;
+        }
+        const set = new Set(order.products.map((item) => item.product_id));
+        const ids = Array.from(set);
+        const products = yield product_model_1.default.find({ _id: { $in: ids } }).lean();
+        for (const product of products) {
+            const orderItem = order.products.find((item) => item.product_id === String(product._id));
+            if (orderItem) {
+                product["reviewed"] = orderItem.reviewed;
+            }
+        }
+        res.status(200).json({
+            code: 200,
+            message: "Success",
+            data: products,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.getProductInfo = getProductInfo;
+const reviewMultiProducts = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { orderNo, data, ids } = req.body;
+        const user_id = req.userId;
+        const order = yield order_model_1.default.findOne({ orderNo: orderNo, user_id });
+        if (!order) {
+            res.status(404).json({
+                code: 404,
+                message: "Order not found",
+            });
+            return;
+        }
+        const products = yield product_model_1.default.find({ _id: { $in: ids } }).lean();
+        for (const product of products) {
+            const review = new review_model_1.default(Object.assign(Object.assign({}, data), { user_id: user_id, product_id: String(product._id) }));
+            const orders = order.products.filter((item) => item.product_id === String(product._id));
+            if (orders.length > 0) {
+                orders.forEach((item) => {
+                    item.reviewed = true;
+                });
+                yield order.save();
+            }
+            yield review.save();
+        }
+        res.status(200).json({
+            code: 200,
+            message: "Post multi review Success",
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.reviewMultiProducts = reviewMultiProducts;
+const getProductAndCreateCartItemReorder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const order_no = req.params.order_no;
+        const user_id = req.userId;
+        const order = yield order_model_1.default.findOne({ orderNo: order_no }).lean();
+        if (!order) {
+            res.status(404).json({
+                code: 404,
+                message: "Order not found",
+            });
+            return;
+        }
+        if (order.user_id !== user_id) {
+            res.status(403).json({
+                code: 403,
+                message: "Forbidden",
+            });
+            return;
+        }
+        const set = new Set(order.products.map((item) => item.product_id));
+        const subIds = order.products.map((item) => item.sub_product_id);
+        const ids = Array.from(set);
+        const products = yield product_model_1.default.find({
+            _id: { $in: ids },
+            deleted: false,
+        })
+            .lean()
+            .select("title cost price discountedPrice stock slug _id productType SKU thumbnail");
+        const subProducts = yield subProduct_model_1.default.find({
+            _id: { $in: subIds },
+            deleted: false,
+        })
+            .lean()
+            .select("thumbnail product_id _id SKU price discountedPrice stock");
+        const data = [];
+        for (const product of order.products) {
+            const foundProduct = products.find((item) => String(item._id) === product.product_id);
+            const foundSubProduct = subProducts.find((item) => String(item._id) === product.sub_product_id);
+            if (foundSubProduct) {
+                data.push(Object.assign(Object.assign(Object.assign(Object.assign({}, product), foundProduct), foundSubProduct), { thumbnail_product: (foundSubProduct === null || foundSubProduct === void 0 ? void 0 : foundSubProduct.thumbnail) || "" }));
+            }
+            else if (foundProduct) {
+                data.push(Object.assign(Object.assign({}, product), foundProduct));
+            }
+        }
+        const carts = [];
+        for (const item of data) {
+            const cartItem = new cartDetail_model_1.default(item);
+            const object = Object.assign(Object.assign(Object.assign({}, item), cartItem.toObject()), { cartItem_id: String(cartItem._id) });
+            delete object.reviewed;
+            delete object.deleted;
+            carts.push(object);
+        }
+        req.session["cart_checkout"] = carts;
+        res.status(200).json({
+            code: 200,
+            message: "Success",
+            data: carts,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            code: 500,
+            message: error.message || error,
+        });
+    }
+});
+exports.getProductAndCreateCartItemReorder = getProductAndCreateCartItemReorder;
