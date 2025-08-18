@@ -50,6 +50,7 @@ const schema = new mongoose_1.Schema({
             SKU: String,
             product_id: String,
             sub_product_id: String,
+            slug: String,
             reviewed: {
                 type: Boolean,
                 default: false,

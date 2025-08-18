@@ -27,18 +27,26 @@ const getCart = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 user_id: user_id,
             });
             yield cart.save();
+            res.status(200).json({
+                code: 200,
+                message: "Cart OK",
+                data: {
+                    carts: [],
+                    cart_id: cart.id,
+                },
+            });
+            return;
         }
         const cartItems = yield cartDetail_model_1.default.find({ cart_id: cart.id }).lean();
         const productIds = cartItems.map((item) => item.product_id);
         const subIds = cartItems.map((item) => item.sub_product_id);
         const products = yield product_model_1.default.find({
             _id: { $in: productIds },
-            deleted: false,
         });
         const subProducts = yield subProduct_model_1.default.find({
             _id: { $in: subIds },
-            deleted: false,
         });
+        const data = [];
         for (const item of cartItems) {
             const indexProduct = products.findIndex((pro) => pro.id === item.product_id);
             item["cartItem_id"] = item._id;
@@ -47,8 +55,9 @@ const getCart = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 item["title"] = products[indexProduct].title;
                 item["slug"] = products[indexProduct].slug;
                 item["cost"] = products[indexProduct].cost;
+                item["SKU"] = products[indexProduct].SKU;
             }
-            if (item.options.length > 0) {
+            if (item.options.length > 0 || item.sub_product_id) {
                 const indexSub = subProducts.findIndex((sub) => sub.id === item.sub_product_id);
                 const options_info = [];
                 for (const option_id of item.options) {
@@ -78,15 +87,18 @@ const getCart = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 item["stock"] = products[indexProduct].stock;
                 item["SKU"] = products[indexProduct].SKU;
             }
-            if (!item["SKU"]) {
-                item["SKU"] = products[indexProduct].SKU;
+            if (indexProduct === -1) {
+                data.push(Object.assign(Object.assign({}, item), { title: "Deleted Product", thumbnail: "", price: 0 }));
+            }
+            else {
+                data.push(item);
             }
         }
         res.json({
             code: 200,
             message: "Cart ok!!",
             data: {
-                carts: cartItems,
+                carts: data,
                 cart_id: cart.id,
             },
         });

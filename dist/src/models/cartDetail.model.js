@@ -41,6 +41,7 @@ const schema = new mongoose_1.Schema({
     },
     product_id: String,
     sub_product_id: String,
+    slug: String,
     options: [String],
     quantity: Number,
     productType: {

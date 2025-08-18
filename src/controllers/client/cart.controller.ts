@@ -20,6 +20,15 @@ export const getCart = async (req: MyRequest, res: Response) => {
         user_id: user_id,
       });
       await cart.save();
+      res.status(200).json({
+        code: 200,
+        message: "Cart OK",
+        data: {
+          carts: [],
+          cart_id: cart.id,
+        },
+      });
+      return;
     }
 
     const cartItems = await CartDetail.find({ cart_id: cart.id }).lean();
@@ -29,12 +38,12 @@ export const getCart = async (req: MyRequest, res: Response) => {
 
     const products = await Product.find({
       _id: { $in: productIds },
-      deleted: false,
     });
     const subProducts = await SubProduct.find({
       _id: { $in: subIds },
-      deleted: false,
     });
+
+    const data = [];
 
     for (const item of cartItems) {
       const indexProduct = products.findIndex(
@@ -46,8 +55,9 @@ export const getCart = async (req: MyRequest, res: Response) => {
         item["title"] = products[indexProduct].title;
         item["slug"] = products[indexProduct].slug;
         item["cost"] = products[indexProduct].cost;
+        item["SKU"] = products[indexProduct].SKU;
       }
-      if (item.options.length > 0) {
+      if (item.options.length > 0 || item.sub_product_id) {
         const indexSub = subProducts.findIndex(
           (sub) => sub.id === item.sub_product_id
         );
@@ -79,8 +89,16 @@ export const getCart = async (req: MyRequest, res: Response) => {
         item["stock"] = products[indexProduct].stock;
         item["SKU"] = products[indexProduct].SKU;
       }
-      if (!item["SKU"]) {
-        item["SKU"] = products[indexProduct].SKU;
+      if (indexProduct === -1) {
+        data.push({
+          ...item,
+          title: "Deleted Product",
+          thumbnail: "",
+          price: 0,
+        });
+        // await CartDetail.deleteOne({ _id: item._id });
+      } else {
+        data.push(item);
       }
     }
 
@@ -88,7 +106,7 @@ export const getCart = async (req: MyRequest, res: Response) => {
       code: 200,
       message: "Cart ok!!",
       data: {
-        carts: cartItems,
+        carts: data,
         cart_id: cart.id,
       },
     });
