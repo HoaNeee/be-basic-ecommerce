@@ -17,9 +17,14 @@ const product_model_1 = __importDefault(require("../src/models/product.model"));
 const subProduct_model_1 = __importDefault(require("../src/models/subProduct.model"));
 const updateStockWhenOrder = (order, type) => __awaiter(void 0, void 0, void 0, function* () {
     const skus = order.products.map((item) => item.SKU);
-    const products = yield product_model_1.default.find({ SKU: { $in: skus }, deleted: false });
+    const product_ids = order.products.map((i) => i.product_id);
+    const sub_product_ids = order.products.map((i) => i.sub_product_id);
+    const products = yield product_model_1.default.find({
+        $or: [{ SKU: { $in: skus } }, { _id: { $in: product_ids } }],
+        deleted: false,
+    });
     const subProducts = yield subProduct_model_1.default.find({
-        SKU: { $in: skus },
+        $or: [{ SKU: { $in: skus } }, { _id: { $in: sub_product_ids } }],
         deleted: false,
     });
     let direc = 1;

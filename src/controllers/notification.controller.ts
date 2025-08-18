@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { MyRequest } from "../middlewares/admin/auth.middleware";
-import { sendMail } from "../../helpers/sendMail";
 import Notification from "../models/notification.model";
 
 //[GET] /notifications

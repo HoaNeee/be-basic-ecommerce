@@ -10,6 +10,7 @@ import {
   convertInput,
   getWordsFilterInput,
 } from "../../../helpers/convertInput";
+import { Model } from "mongoose";
 
 // [GET] /search
 export const search = async (req: Request, res: Response) => {

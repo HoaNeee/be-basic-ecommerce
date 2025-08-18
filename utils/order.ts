@@ -1,16 +1,24 @@
 import Product from "../src/models/product.model";
 import SubProduct from "../src/models/subProduct.model";
-import { Order } from "../src/types/order.types";
+import { IOrder } from "../src/types/order.types";
 
 export const updateStockWhenOrder = async (
-  order: Order | any,
+  order: IOrder | any,
   type: "plus" | "minus"
 ) => {
-  const skus = order.products.map((item) => item.SKU);
+  const skus = order.products.map(
+    (item: IOrder["products"][number]) => item.SKU
+  );
 
-  const products = await Product.find({ SKU: { $in: skus }, deleted: false });
+  const product_ids = order.products.map((i) => i.product_id);
+  const sub_product_ids = order.products.map((i) => i.sub_product_id);
+
+  const products = await Product.find({
+    $or: [{ SKU: { $in: skus } }, { _id: { $in: product_ids } }],
+    deleted: false,
+  });
   const subProducts = await SubProduct.find({
-    SKU: { $in: skus },
+    $or: [{ SKU: { $in: skus } }, { _id: { $in: sub_product_ids } }],
     deleted: false,
   });
 

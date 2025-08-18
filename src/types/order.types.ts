@@ -1,4 +1,4 @@
-export interface Order {
+export interface IOrder {
   _id: string;
   user_id: string;
   products: [
@@ -10,6 +10,8 @@ export interface Order {
       quantity: number;
       cost: number;
       SKU: string;
+      product_id: string;
+      sub_product_id: string;
     }
   ];
   promotion: {

@@ -12,6 +12,8 @@ import Notification from "../../models/notification.model";
 import Product from "../../models/product.model";
 import SubProduct from "../../models/subProduct.model";
 import { getIo } from "../../../socket";
+import { IProduct, ISubProduct } from "../../types/product.types";
+import { IOrder } from "../../types/order.types";
 
 // [GET] /orders
 export const orders = async (req: Request, res: Response) => {
@@ -124,7 +126,7 @@ export const changeStatus = async (req: MyRequest, res: Response) => {
 
     const order = await Order.findOne({ _id: order_id });
 
-    const customer = await Customer.findOne({ _id: order.user_id });
+    const customer = await Customer.findOne({ _id: order.user_id }).lean();
 
     if (!order) {
       throw Error("Order not found!");
@@ -134,30 +136,28 @@ export const changeStatus = async (req: MyRequest, res: Response) => {
       //update stock here;
 
       const skus = order.products.map((item) => item.SKU);
+      const product_ids = order.products.map((i) => i.product_id);
+      const sub_product_ids = order.products.map((i) => i.sub_product_id);
 
       const products = await Product.find({
-        SKU: { $in: skus },
-        deleted: false,
-      });
+        $or: [{ _id: { $in: product_ids } }, { SKU: { $in: skus } }],
+      }).lean();
       const subProducts = await SubProduct.find({
-        SKU: { $in: skus },
-        deleted: false,
-      });
+        $or: [{ _id: { $in: sub_product_ids } }, { SKU: { $in: skus } }],
+      }).lean();
 
-      if (
-        products.some((item) => item.stock <= 0) ||
-        subProducts.some((item) => item.stock <= 0)
-      ) {
-        throw Error("Some products are outting of stock!");
-      }
+      await checkOutOfStockOrDeleted(
+        products as any,
+        subProducts as any,
+        order as any
+      );
 
       await updateStockWhenOrder(order, "minus");
     }
 
     if (status === "canceled") {
       if (order.status !== "pending") {
-        //update stock here;
-        console.log("need update stock because this order status is canceled");
+        await updateStockWhenOrder(order, "plus");
       }
       order.cancel = {
         reasonCancel: req.body.reasonCancel,
@@ -190,7 +190,7 @@ export const changeStatus = async (req: MyRequest, res: Response) => {
 
     await notify1.save();
 
-    if (customer.setting.notification || !customer.setting) {
+    if (!customer.setting || customer.setting.notification) {
       const io = getIo();
       io.emit("SERVER_RETURN_CHANGE_STATUS_ORDER", {
         user_id: order.user_id,
@@ -424,5 +424,49 @@ export const getDataChart2 = async (req: Request, res: Response) => {
       code: 400,
       message: error.message,
     });
+  }
+};
+
+const checkOutOfStockOrDeleted = async (
+  product: IProduct[],
+  subProducts: ISubProduct[],
+  order: IOrder
+) => {
+  try {
+    if (
+      product.some((it) => it.deleted) ||
+      subProducts.some((it) => it.deleted)
+    ) {
+      throw new Error("Some products are deleted!");
+    }
+
+    let isOutOfStock = false;
+    isOutOfStock =
+      isOutOfStock ||
+      product.some((product) => {
+        const productInOrder = order.products.find(
+          (it) =>
+            String(product._id) === String(it.product_id) ||
+            product.SKU === it.SKU
+        );
+
+        return productInOrder ? product.stock < productInOrder.quantity : false;
+      });
+
+    isOutOfStock =
+      isOutOfStock ||
+      subProducts.some((sub) => {
+        const productInOrder = order.products.find(
+          (it) =>
+            String(sub._id) === String(it.sub_product_id) || sub.SKU === it.SKU
+        );
+        return productInOrder ? sub.stock < productInOrder.quantity : false;
+      });
+
+    if (isOutOfStock) {
+      throw new Error("Some products are out of stock!");
+    }
+  } catch (error) {
+    throw new Error("Error checking stock: " + error.message);
   }
 };

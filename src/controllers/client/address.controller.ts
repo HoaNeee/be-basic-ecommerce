@@ -1,7 +1,4 @@
 import { Request, Response } from "express";
-import Category from "../../models/category.model";
-import Pagination from "../../../helpers/pagination";
-import Product from "../../models/product.model";
 import { MyRequest } from "../../middlewares/client/auth.middleware";
 import Address from "../../models/address.model";
 

@@ -1,6 +1,5 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { MyRequest } from "../../middlewares/client/auth.middleware";
-import Bill from "../../models/order.model";
 import Product from "../../models/product.model";
 import SubProduct from "../../models/subProduct.model";
 import Favorite from "../../models/favorite.model";

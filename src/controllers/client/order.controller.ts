@@ -12,7 +12,6 @@ import Promotion from "../../models/promotion.model";
 import Product from "../../models/product.model";
 import Review from "../../models/review.model";
 import SubProduct from "../../models/subProduct.model";
-import Cart from "../../models/cart.model";
 
 interface TemplateHTMLOrder {
   cusName: string;

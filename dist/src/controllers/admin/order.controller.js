@@ -142,29 +142,26 @@ const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const order_id = req.params.id;
         const { status } = req.body;
         const order = yield order_model_1.default.findOne({ _id: order_id });
-        const customer = yield customer_model_1.default.findOne({ _id: order.user_id });
+        const customer = yield customer_model_1.default.findOne({ _id: order.user_id }).lean();
         if (!order) {
             throw Error("Order not found!");
         }
         if (status === "confirmed" && order.status === "pending") {
             const skus = order.products.map((item) => item.SKU);
+            const product_ids = order.products.map((i) => i.product_id);
+            const sub_product_ids = order.products.map((i) => i.sub_product_id);
             const products = yield product_model_1.default.find({
-                SKU: { $in: skus },
-                deleted: false,
-            });
+                $or: [{ _id: { $in: product_ids } }, { SKU: { $in: skus } }],
+            }).lean();
             const subProducts = yield subProduct_model_1.default.find({
-                SKU: { $in: skus },
-                deleted: false,
-            });
-            if (products.some((item) => item.stock <= 0) ||
-                subProducts.some((item) => item.stock <= 0)) {
-                throw Error("Some products are outting of stock!");
-            }
+                $or: [{ _id: { $in: sub_product_ids } }, { SKU: { $in: skus } }],
+            }).lean();
+            yield checkOutOfStockOrDeleted(products, subProducts, order);
             yield (0, order_1.updateStockWhenOrder)(order, "minus");
         }
         if (status === "canceled") {
             if (order.status !== "pending") {
-                console.log("need update stock because this order status is canceled");
+                yield (0, order_1.updateStockWhenOrder)(order, "plus");
             }
             order.cancel = {
                 reasonCancel: req.body.reasonCancel,
@@ -188,7 +185,7 @@ const changeStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             receiver: "customer",
         });
         yield notify1.save();
-        if (customer.setting.notification || !customer.setting) {
+        if (!customer.setting || customer.setting.notification) {
             const io = (0, socket_1.getIo)();
             io.emit("SERVER_RETURN_CHANGE_STATUS_ORDER", {
                 user_id: order.user_id,
@@ -367,3 +364,31 @@ const getDataChart2 = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.getDataChart2 = getDataChart2;
+const checkOutOfStockOrDeleted = (product, subProducts, order) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        if (product.some((it) => it.deleted) ||
+            subProducts.some((it) => it.deleted)) {
+            throw new Error("Some products are deleted!");
+        }
+        let isOutOfStock = false;
+        isOutOfStock =
+            isOutOfStock ||
+                product.some((product) => {
+                    const productInOrder = order.products.find((it) => String(product._id) === String(it.product_id) ||
+                        product.SKU === it.SKU);
+                    return productInOrder ? product.stock < productInOrder.quantity : false;
+                });
+        isOutOfStock =
+            isOutOfStock ||
+                subProducts.some((sub) => {
+                    const productInOrder = order.products.find((it) => String(sub._id) === String(it.sub_product_id) || sub.SKU === it.SKU);
+                    return productInOrder ? sub.stock < productInOrder.quantity : false;
+                });
+        if (isOutOfStock) {
+            throw new Error("Some products are out of stock!");
+        }
+    }
+    catch (error) {
+        throw new Error("Error checking stock: " + error.message);
+    }
+});

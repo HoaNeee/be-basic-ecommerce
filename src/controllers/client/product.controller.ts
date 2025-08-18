@@ -959,31 +959,10 @@ export const filterProduct = async (req: Request, res: Response) => {
       for (const product of products) {
         if (product.productType === "variations") {
           if (subSet.has(String(product._id))) {
-            // const allSubs = await SubProduct.find({
-            //   product_id: product._id,
-            //   deleted: false,
-            // });
             const allSubs = subMap.get(String(product._id));
-
             solvePriceStock(product, allSubs);
             data.push(product);
           }
-
-          // const subProducts = await SubProduct.find({
-          //   $and: [
-          //     { deleted: false, product_id: product._id },
-          //     { price: { $gte: price[0] } },
-          //     { price: { $lte: price[1] } },
-          //   ],
-          // });
-          // if (subProducts.length > 0) {
-          //   const allSubs = await SubProduct.find({
-          //     product_id: product._id,
-          //     deleted: false,
-          //   });
-          //   solvePriceStock(product, allSubs);
-          //   data.push(product);
-          // }
         } else {
           if (product.price >= price[0] && product.price <= price[1]) {
             data.push(product);
