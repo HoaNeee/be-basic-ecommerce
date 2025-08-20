@@ -265,6 +265,9 @@ export const likeBlog = async (req: Request, res: Response) => {
     res.json({
       code: 200,
       message: "Like OK",
+      data: {
+        likedLength: blog.liked.length,
+      },
     });
   } catch (error) {
     res.json({

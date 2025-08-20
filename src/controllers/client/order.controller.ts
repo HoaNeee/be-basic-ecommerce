@@ -195,6 +195,14 @@ export const detail = async (req: MyRequest, res: Response) => {
 
     const order = await Order.findOne({ orderNo: order_no, deleted: false });
 
+    if (!order) {
+      res.status(404).json({
+        code: 404,
+        message: "Order not found",
+      });
+      return;
+    }
+
     const user_id = req.userId;
     if (user_id && order.user_id !== user_id) {
       res.status(403).json({
@@ -212,7 +220,7 @@ export const detail = async (req: MyRequest, res: Response) => {
   } catch (error) {
     console.log(error);
     res.json({
-      code: 400,
+      code: 500,
       message: error.message || error,
     });
   }

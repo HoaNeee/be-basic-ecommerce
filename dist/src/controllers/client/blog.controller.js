@@ -243,6 +243,9 @@ const likeBlog = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         res.json({
             code: 200,
             message: "Like OK",
+            data: {
+                likedLength: blog.liked.length,
+            },
         });
     }
     catch (error) {
