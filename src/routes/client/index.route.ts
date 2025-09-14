@@ -20,12 +20,12 @@ import * as settingMiddleware from "../../middlewares/setting.middleware";
 import subscriberRouter from "./subscriber.route";
 
 const ClientRoute = (app: Express) => {
-	app.use((req, res, next) => {
-		if (req.session["createdAt"] === undefined) {
-			req.session["createdAt"] = new Date();
-		}
-		next();
-	});
+	// app.use((req, res, next) => {
+	// 	if (req.session["createdAt"] === undefined) {
+	// 		req.session["createdAt"] = new Date();
+	// 	}
+	// 	next();
+	// });
 	app.use(settingMiddleware.setting);
 
 	app.use("/auth", authRouter);
