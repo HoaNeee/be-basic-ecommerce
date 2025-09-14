@@ -51,6 +51,7 @@ const socket = __importStar(require("./socket"));
 const express_session_1 = __importStar(require("express-session"));
 const express_rate_limit_1 = require("express-rate-limit");
 const connect_mongo_1 = __importDefault(require("connect-mongo"));
+const isProduction = process.env.NODE_ENV === "production";
 const limiter = (0, express_rate_limit_1.rateLimit)({
     windowMs: 15 * 60 * 1000,
     max: 2000,
@@ -81,30 +82,28 @@ app.use((0, cors_1.default)({
     origin: whiteList,
     credentials: true,
 }));
+const store = isProduction
+    ? new connect_mongo_1.default({
+        mongoUrl: process.env.MONGODB_URI,
+        collectionName: "sessions",
+        ttl: 24 * 60 * 60,
+    })
+    : new express_session_1.MemoryStore();
 app.use((0, cookie_parser_1.default)());
 app.use(express_1.default.urlencoded({ extended: false }));
 app.use(express_1.default.json());
 app.use((0, express_session_1.default)({
     secret: process.env.SESSION_SECRET,
-    resave: true,
+    resave: false,
     saveUninitialized: false,
-    cookie: process.env.NODE_ENV === "dev"
-        ? {
-            secure: false,
-        }
-        : {
-            secure: true,
-            httpOnly: true,
-            sameSite: "none",
-            domain: ".kakrist.site",
-        },
-    store: process.env.NODE_ENV === "dev"
-        ? new express_session_1.MemoryStore()
-        : new connect_mongo_1.default({
-            mongoUrl: process.env.MONGO_URL,
-            collectionName: "sessions",
-            ttl: 24 * 60 * 60,
-        }),
+    cookie: {
+        secure: isProduction,
+        httpOnly: true,
+        sameSite: isProduction ? "none" : "lax",
+        domain: isProduction ? ".kakrist.site" : undefined,
+        maxAge: undefined,
+    },
+    store: store,
 }));
 app.use(limiter);
 (0, index_route_2.default)(app);

@@ -20,33 +20,32 @@ import * as settingMiddleware from "../../middlewares/setting.middleware";
 import subscriberRouter from "./subscriber.route";
 
 const ClientRoute = (app: Express) => {
-  app.use((req, res, next) => {
-    // console.log(process.memoryUsage());
-    if (req.session["createdAt"] === undefined) {
-      req.session["createdAt"] = new Date();
-    }
-    next();
-  });
-  app.use(settingMiddleware.setting);
+	app.use((req, res, next) => {
+		if (req.session["createdAt"] === undefined) {
+			req.session["createdAt"] = new Date();
+		}
+		next();
+	});
+	app.use(settingMiddleware.setting);
 
-  app.use("/auth", authRouter);
-  app.use("/categories", categoryRouter);
-  app.use("/promotions", promotionRouter);
-  app.use("/products", productRouter);
-  app.use("/reviews", reviewRouter);
-  app.use("/suppliers", supplierRouter);
-  app.use("/blogs", blogRouter);
-  app.use("/search", searchRouter);
-  app.use("/chatbot", chatBotRouter);
-  app.use("/suggestions", suggestRouter);
-  app.use("/subscribers", subscriberRouter);
+	app.use("/auth", authRouter);
+	app.use("/categories", categoryRouter);
+	app.use("/promotions", promotionRouter);
+	app.use("/products", productRouter);
+	app.use("/reviews", reviewRouter);
+	app.use("/suppliers", supplierRouter);
+	app.use("/blogs", blogRouter);
+	app.use("/search", searchRouter);
+	app.use("/chatbot", chatBotRouter);
+	app.use("/suggestions", suggestRouter);
+	app.use("/subscribers", subscriberRouter);
 
-  app.use("/cart", authMiddleware.isAccess, cartRouter);
-  app.use("/address", authMiddleware.isAccess, addressRouter);
-  app.use("/orders", authMiddleware.isAccess, orderRouter);
-  app.use("/favorites", authMiddleware.isAccess, favoriteRouter);
-  app.use("/transaction", authMiddleware.isAccess, transactionRouter);
-  app.use("/upload", authMiddleware.isAccess, uploadRouter);
+	app.use("/cart", authMiddleware.isAccess, cartRouter);
+	app.use("/address", authMiddleware.isAccess, addressRouter);
+	app.use("/orders", authMiddleware.isAccess, orderRouter);
+	app.use("/favorites", authMiddleware.isAccess, favoriteRouter);
+	app.use("/transaction", authMiddleware.isAccess, transactionRouter);
+	app.use("/upload", authMiddleware.isAccess, uploadRouter);
 };
 
 export default ClientRoute;

@@ -62,7 +62,7 @@ const getTrackedList = function (req, res) {
         try {
             const last_tracked_list = req.session["last_tracked_list"] || [];
             const last_tracked = last_tracked_list[last_tracked_list.length - 1];
-            console.log(last_tracked);
+            console.log("last_tracked: 73: ", last_tracked);
             if (last_tracked && last_tracked.type_track === TRACK_TYPES.PRODUCT) {
                 const product = yield getProductWithVariations(last_tracked.value);
                 if (product) {

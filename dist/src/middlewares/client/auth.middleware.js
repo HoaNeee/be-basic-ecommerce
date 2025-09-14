@@ -34,6 +34,8 @@ const isAccess = (req, res, next) => __awaiter(void 0, void 0, void 0, function*
         else {
             req.session["has_welcome"] = false;
         }
+        console.log("req.session['has_welcome']: ", req.session["has_welcome"]);
+        console.log("createdAt_session", req.session["createdAt"]);
         next();
     }
     catch (error) {

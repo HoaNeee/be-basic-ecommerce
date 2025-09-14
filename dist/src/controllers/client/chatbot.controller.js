@@ -239,7 +239,7 @@ const getIntent = (input, req, res, chatModel) => __awaiter(void 0, void 0, void
         });
         const output = response.text.slice(response.text.indexOf("{"), response.text.lastIndexOf("}") + 1);
         const object = JSON.parse(output);
-        console.log(object);
+        console.log("301", object);
         if ((object === null || object === void 0 ? void 0 : object.intent) === "search_product") {
             if (!object.new) {
                 const points = object.query.points;
@@ -842,7 +842,7 @@ const solveAction = (action, req, res, input, chat) => __awaiter(void 0, void 0,
             }
         }
     }
-    console.log(type, action);
+    console.log("1111", type, action);
     if (type === "search_product") {
         const products = yield getProducts(input, {}, req);
         return yield promptProduct(req, res, input, chat, type, products);
