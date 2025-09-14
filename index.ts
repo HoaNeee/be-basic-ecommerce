@@ -58,7 +58,7 @@ app.use(
 
 const store = isProduction
 	? new MongoStore({
-			mongoUrl: process.env.MONGODB_URI,
+			mongoUrl: process.env.MONGO_URL,
 			collectionName: "sessions",
 			ttl: 24 * 60 * 60,
 	  })

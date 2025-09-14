@@ -84,7 +84,7 @@ app.use((0, cors_1.default)({
 }));
 const store = isProduction
     ? new connect_mongo_1.default({
-        mongoUrl: process.env.MONGODB_URI,
+        mongoUrl: process.env.MONGO_URL,
         collectionName: "sessions",
         ttl: 24 * 60 * 60,
     })
