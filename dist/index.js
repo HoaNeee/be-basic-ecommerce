@@ -110,6 +110,15 @@ app.use(limiter);
 (0, index_route_1.default)(app);
 (0, notification_route_1.default)(app);
 (0, setting_route_1.default)(app);
+app.get("/test-cookie", (req, res) => {
+    res.cookie("test_cookie", "test_value", {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
+        domain: isProduction ? ".kakrist.site" : undefined,
+    });
+    res.send("Test cookie set");
+});
 socket.connect(io);
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
