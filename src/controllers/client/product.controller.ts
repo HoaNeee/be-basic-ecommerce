@@ -478,7 +478,18 @@ export const products_v2 = async (req: Request, res: Response) => {
       {
         $addFields: {
           product_id_string: { $toString: "$_id" },
-          supplier_object_id: { $toObjectId: "$supplier_id" },
+          supplier_object_id: {
+            $cond: {
+              if: {
+                $or: [
+                  { $eq: ["$supplier_id", null] },
+                  { $eq: ["$supplier_id", ""] },
+                ],
+              },
+              then: null,
+              else: { $toObjectId: "$supplier_id" },
+            },
+          },
         },
       },
       {
